@@ -32,9 +32,7 @@ const NAME = process.env.NAME || 'ddfathu';
 
 const LOG_PATH = path.join(FILE_PATH, "boot.log"); 
 const ZT_LOG_PATH = "/tmp/named_tunnel.log";
-const ZT_VMESS_LOG_PATH = "/tmp/vmess_tunnel.log";
-const ZT_TOKEN_SSH_FILE = "/tmp/zt_token_ssh.txt";
-const ZT_TOKEN_VMESS_FILE = "/tmp/zt_token_vmess.txt";
+const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
@@ -91,33 +89,20 @@ function saveDb(data) {
 
 let currentActiveDomain = '';
 
-// 🔍 FUNGSI RESTART DUAL TUNNEL AMAN ANTI-CRASH
-function restartSshTunnel(newToken) {
+// 🔍 FUNGSI RESTART SINGLE TUNNEL UNTUK SEMUA PORT
+function restartSingleTunnel(newToken) {
     const cp = require('child_process');
-    cp.exec("pkill -9 -f 'cloudflared.*8880'", () => {
+    // Matikan biner cloudflared yang sedang berjalan
+    cp.exec("pkill -9 -f 'cloudflared'", () => {
         setTimeout(() => {
             if (newToken && newToken.trim()) {
-                fs.writeFileSync(ZT_TOKEN_SSH_FILE, newToken.trim());
-                const targetPort = process.env.ARGO_PORT_SSH || "8880";
-                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" --url "http://localhost:${targetPort}" > ${ZT_LOG_PATH} 2>&1 &`);
+                fs.writeFileSync(ZT_SINGLE_TOKEN_FILE, newToken.trim());
+                // Murni jalankan via TOKEN tanpa merantai --url agar Ingress Rules Dashboard CF bekerja penuh
+                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
             } else {
-                if (fs.existsSync(ZT_TOKEN_SSH_FILE)) fs.unlinkSync(ZT_TOKEN_SSH_FILE);
-                if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token SSH Dihapus.");
-            }
-        }, 1000);
-    });
-}
-
-function restartVmessTunnel(newToken) {
-    const cp = require('child_process');
-    cp.exec("pkill -9 -f 'cloudflared.*8001'", () => {
-        setTimeout(() => {
-            if (newToken && newToken.trim()) {
-                fs.writeFileSync(ZT_TOKEN_VMESS_FILE, newToken.trim());
-                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" --url "http://localhost:${ARGO_PORT}" > ${ZT_VMESS_LOG_PATH} 2>&1 &`);
-            } else {
-                if (fs.existsSync(ZT_TOKEN_VMESS_FILE)) fs.unlinkSync(ZT_TOKEN_VMESS_FILE);
-                if (fs.existsSync(ZT_VMESS_LOG_PATH)) fs.writeFileSync(ZT_VMESS_LOG_PATH, "Token VMess Dihapus.");
+                if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) fs.unlinkSync(ZT_SINGLE_TOKEN_FILE);
+                if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token Dihapus.");
+                // Jika Token Dihapus, balik ke Quick Tunnel untuk Vmess (Port 8001)
                 let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
                 cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
             }
@@ -125,12 +110,12 @@ function restartVmessTunnel(newToken) {
     });
 }
 
-// 🔍 REGEX PARSER UNTUK FILTER DOMAIN DARI PORT LOG TERPISAH (8880/8881 vs 8001)
-function getZeroTrustDomainsFromFile(filePath, targetPorts) {
+// 🔍 REGEX PARSER PARSE DOMAIN DENGAN FILTER PORT NYA MASING-MASING
+function getDomainsByPort(targetPorts) {
     const domains = [];
     try {
-        if (fs.existsSync(filePath)) {
-            const logContent = fs.readFileSync(filePath, 'utf8');
+        if (fs.existsSync(ZT_LOG_PATH)) {
+            const logContent = fs.readFileSync(ZT_LOG_PATH, 'utf8');
             const portRegexStr = targetPorts.join('|');
 
             const regexIngress = new RegExp(`(?:\\\\?"|")hostname(?:\\\\?"|")\\s*:\\s*(?:\\\\?"|")([^"\\\\]+)(?:\\\\?"|")[^}]*?localhost:(${portRegexStr})`, 'g');
@@ -160,20 +145,12 @@ function getZeroTrustDomainsFromFile(filePath, targetPorts) {
     return domains;
 }
 
-function getZeroTrustDomains() {
-    return getZeroTrustDomainsFromFile(ZT_LOG_PATH, ['8880', '8881']);
-}
-
-function getVmessZeroTrustDomains() {
-    return getZeroTrustDomainsFromFile(ZT_VMESS_LOG_PATH, ['8001']);
-}
-
 function getCurrentHosts() {
     let hwInfo = {};
     if (fs.existsSync(STATS_PATH)) {
         try { hwInfo = JSON.parse(fs.readFileSync(STATS_PATH, 'utf8')); } catch (e) {}
     }
-    const ztDomains = getZeroTrustDomains();
+    const ztDomains = getDomainsByPort(['8880', '8881']);
     const namedUrl = ztDomains.length > 0 ? ztDomains[0].domain : (process.env.D || "");
     let quickUrl = currentActiveDomain || "Menunggu Quick Tunnel...";
     
@@ -330,10 +307,10 @@ async function downloadFilesAndRun() {
 
   exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
   
-  if (fs.existsSync(ZT_TOKEN_VMESS_FILE)) {
-    const vToken = fs.readFileSync(ZT_TOKEN_VMESS_FILE, 'utf8').trim();
-    if (vToken) {
-      restartVmessTunnel(vToken);
+  if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
+    const singleToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
+    if (singleToken) {
+      restartSingleTunnel(singleToken);
     } else {
       let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
       exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
@@ -438,11 +415,8 @@ const server = http.createServer(async (req, res) => {
             return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
         
-        const sshToken = query.ssh_token !== undefined ? query.ssh_token.trim() : null;
-        const vmessToken = query.vmess_token !== undefined ? query.vmess_token.trim() : null;
-
-        if (sshToken !== null) restartSshTunnel(sshToken);
-        if (vmessToken !== null) restartVmessTunnel(vmessToken);
+        const singleToken = query.token !== undefined ? query.token.trim() : null;
+        if (singleToken !== null) restartSingleTunnel(singleToken);
 
         return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
     }
@@ -482,8 +456,8 @@ const server = http.createServer(async (req, res) => {
         if (fs.existsSync(STATS_PATH)) { try { hwInfo = { ...hwInfo, ...JSON.parse(fs.readFileSync(STATS_PATH, 'utf8')) }; } catch (e) {} }
         
         let quickUrl = currentActiveDomain || "Menunggu Quick Tunnel...";
-        let ztDomains = getZeroTrustDomains();
-        let ztVmessDomains = getVmessZeroTrustDomains();
+        let ztSshDomains = getDomainsByPort(['8880', '8881']);
+        let ztVmessDomains = getDomainsByPort(['8001']);
         let passConfigured = getAdminPassword() !== null;
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
@@ -491,7 +465,7 @@ const server = http.createServer(async (req, res) => {
             : (process.env.SNI || "Tidak Aktif");
         
         let cleanOnlineStr = String(hwInfo.ssh_online).replace(/👥/g, '').replace(/Active/g, '').replace(/Users/g, '').trim();
-        return res.end(JSON.stringify({ quick_url: quickUrl, zt_domains: ztDomains, zt_vmess_domains: ztVmessDomains, pass_configured: passConfigured, railway_url: rlwyUrl, status: "ONLINE", ...hwInfo, ssh_online: cleanOnlineStr || "0" }));
+        return res.end(JSON.stringify({ quick_url: quickUrl, zt_domains: ztSshDomains, zt_vmess_domains: ztVmessDomains, pass_configured: passConfigured, railway_url: rlwyUrl, status: "ONLINE", ...hwInfo, ssh_online: cleanOnlineStr || "0" }));
     }
 
     if (pathName === '/' || pathName === '/index.html') {
@@ -569,16 +543,15 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU TOMBOL TOKEN (SINKRON DENGAN POPUP) -->
+                <!-- 🔒 MENU 1 TOKEN UNTUK SEMUA PORT (MULTI-HOSTNAME) -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>⚙️ PENGATURAN TOKEN TUNNEL CLOUDFLARE</span>
+                        <span>⚙️ SINGLE TOKEN MULTI-SERVICE TUNNEL</span>
                         <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; text-decoration: underline; font-size: 11px; display: none;">🔑 GANTI PASS ADMIN</span>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptTokenInput('ssh')">🔑 MASUKKAN TOKEN UNTUK SSH (PORT 8880)</button>
-                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff;" onclick="promptTokenInput('vmess')">⚡ MASUKKAN TOKEN UNTUK X-RAY / VMESS (PORT 8001)</button>
+                        <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN CLOUDFLARE (SEMUA PORT)</button>
                     </div>
                 </div>
 
@@ -599,7 +572,7 @@ const server = http.createServer(async (req, res) => {
                     </table>
                 </div>
 
-                <!-- DOMAIN TUNNEL SSH (PORT 8880/8881) -->
+                <!-- DOMAIN TUNNEL SSH (DARI INGRESS RULE PORT 8880) -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -608,7 +581,7 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
-                <!-- DOMAIN TUNNEL VMESS (PORT 8001) -->
+                <!-- DOMAIN TUNNEL VMESS (DARI INGRESS RULE PORT 8001) -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -631,7 +604,6 @@ const server = http.createServer(async (req, res) => {
                     </div>
                     <div>
                       <label class="lbl-vpn">PILIH DOMAIN TARGET TUNNEL</label>
-                      <!-- DROPDOWN SELEKSI DOMAIN TUNNEL UNTUK GENERATOR -->
                       <select id="domainSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
                         <option value="">-- Menunggu Domain --</option>
                       </select>
@@ -672,7 +644,7 @@ const server = http.createServer(async (req, res) => {
                   </div>
                 </div>
 
-                <p class="note">Dual terowongan berjalan sinkron terpisah.<br>Node.js Core Engine Rendering System.</p>
+                <p class="note">Single terowongan multi-host berjalan sinkron.<br>Node.js Core Engine Rendering System.</p>
             </div>
             <script>
                 let adminToken = localStorage.getItem("admin_session_token") || "";
@@ -743,21 +715,19 @@ const server = http.createServer(async (req, res) => {
                     return false;
                 }
 
-                async function promptTokenInput(type) {
+                async function promptSingleTokenInput() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
                         let loggedIn = await handleAdminAuthBtn();
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let labelName = type === 'ssh' ? 'SSH (Port 8880)' : 'X-Ray / VMess (Port 8001)';
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE UNTUK " + labelName + ":\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     
                     if (inputToken === null) return;
 
                     try {
-                        let urlParam = type === 'ssh' ? '&ssh_token=' + encodeURIComponent(inputToken.trim()) : '&vmess_token=' + encodeURIComponent(inputToken.trim());
-                        let res = await fetch('/api/set-token?pass=' + encodeURIComponent(adminToken) + urlParam);
+                        let res = await fetch('/api/set-token?pass=' + encodeURIComponent(adminToken) + '&token=' + encodeURIComponent(inputToken.trim()));
                         let data = await res.json();
                         alert(data.message);
                         updateStats();
@@ -948,7 +918,7 @@ const server = http.createServer(async (req, res) => {
                       let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: "ws", type: "none", host: bugHost, path: basePath, tls: "tls", sni: bugHost };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + bugHost + '&type=ws&host=' + bugHost + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=ws&host=' + host + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'cdn') {
@@ -1008,10 +978,10 @@ server.listen(PORT, () => {
     console.log(`[UI & Xray Gateway Engine] Running seamlessly on port ${PORT}`);
     generateConfig().then(() => downloadFilesAndRun()).then(() => extractDomains()).catch(e => console.error(e));
     
-    if (fs.existsSync(ZT_TOKEN_SSH_FILE)) {
+    if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
         try {
-            const savedToken = fs.readFileSync(ZT_TOKEN_SSH_FILE, 'utf8').trim();
-            if (savedToken) restartSshTunnel(savedToken);
+            const savedToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
+            if (savedToken) restartSingleTunnel(savedToken);
         } catch(e) {}
     }
 
