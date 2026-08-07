@@ -435,7 +435,7 @@ const server = http.createServer(async (req, res) => {
     if (pathName === '/api/set-token') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Password Admin Salah / Akses Ditolak!" }));
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
         
         const sshToken = query.ssh_token !== undefined ? query.ssh_token.trim() : null;
@@ -569,7 +569,7 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU TOMBOL DIPISAHKAN & SELALU TAMPIL DI HALAMAN UTAMA -->
+                <!-- 🔒 MENU TOMBOL TOKEN (SINKRON DENGAN POPUP) -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ PENGATURAN TOKEN TUNNEL CLOUDFLARE</span>
@@ -630,8 +630,11 @@ const server = http.createServer(async (req, res) => {
                       <input id="uuidInput" type="text" value="Loading..." class="input-ssh" style="font-family: monospace;" readonly>
                     </div>
                     <div>
-                      <label class="lbl-vpn">HOST TUNNEL ARGO</label>
-                      <input id="hostInput" type="text" value="Loading..." class="input-ssh" style="font-family: monospace;" readonly>
+                      <label class="lbl-vpn">PILIH DOMAIN TARGET TUNNEL</label>
+                      <!-- DROPDOWN SELEKSI DOMAIN TUNNEL UNTUK GENERATOR -->
+                      <select id="domainSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
+                        <option value="">-- Menunggu Domain --</option>
+                      </select>
                     </div>
                   </div>
                   <div style="margin-bottom: 12px;">
@@ -701,30 +704,50 @@ const server = http.createServer(async (req, res) => {
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
                         let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
-                        if(!newP) return;
+                        if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
                             let data = await res.json();
                             alert(data.message);
-                            if(data.status === "success") { adminToken = newP; localStorage.setItem("admin_session_token", adminToken); updateStats(); }
+                            if(data.status === "success") { 
+                                adminToken = newP; 
+                                localStorage.setItem("admin_session_token", adminToken); 
+                                updateStats(); 
+                                return true;
+                            }
                         } catch(e) { alert("Gagal membuat password!"); }
-                        return;
+                        return false;
                     }
 
-                    if(adminToken) { localStorage.removeItem("admin_session_token"); adminToken = ""; checkAdminUI(); fetchAccounts(); return; }
+                    if(adminToken) { 
+                        localStorage.removeItem("admin_session_token"); 
+                        adminToken = ""; 
+                        checkAdminUI(); 
+                        fetchAccounts(); 
+                        return false; 
+                    }
                     
-                    let pass = prompt("Masukkan Password Admin:"); if(!pass) return;
+                    let pass = prompt("Masukkan Password Admin:"); if(!pass) return false;
                     try {
                         let res = await fetch('/api/login?pass='+pass); let data = await res.json();
-                        if(data.status === "success") { adminToken = data.token; localStorage.setItem("admin_session_token", adminToken); checkAdminUI(); fetchAccounts(); } else { alert(data.message); }
+                        if(data.status === "success") { 
+                            adminToken = data.token; 
+                            localStorage.setItem("admin_session_token", adminToken); 
+                            checkAdminUI(); 
+                            fetchAccounts(); 
+                            return true;
+                        } else { 
+                            alert(data.message); 
+                        }
                     } catch(e) { alert("Gagal terhubung"); }
+                    return false;
                 }
 
                 async function promptTokenInput(type) {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
-                        await handleAdminAuthBtn();
-                        if (!adminToken) return;
+                        let loggedIn = await handleAdminAuthBtn();
+                        if (!loggedIn && !adminToken) return;
                     }
 
                     let labelName = type === 'ssh' ? 'SSH (Port 8880)' : 'X-Ray / VMess (Port 8001)';
@@ -793,6 +816,35 @@ const server = http.createServer(async (req, res) => {
 
                         document.getElementById('railway-url').innerText = data.railway_url; 
                         document.getElementById('quick-url').innerText = data.quick_url;
+
+                        // UPDATE OPTION DROPDOWN DOMAIN UNTUK CONFIG GENERATOR
+                        let domainSelect = document.getElementById('domainSelect');
+                        let currentSelected = domainSelect.value;
+                        let optionsHtml = '';
+
+                        if (data.quick_url && !data.quick_url.includes("Menunggu")) {
+                            optionsHtml += '<option value="' + data.quick_url + '">⚡ Quick Tunnel: ' + data.quick_url + '</option>';
+                        }
+
+                        if (data.zt_vmess_domains && data.zt_vmess_domains.length > 0) {
+                            data.zt_vmess_domains.forEach(d => {
+                                optionsHtml += '<option value="' + d.domain + '">🛡️ Zero Argo VMess: ' + d.domain + '</option>';
+                            });
+                        }
+
+                        if (data.zt_domains && data.zt_domains.length > 0) {
+                            data.zt_domains.forEach(d => {
+                                optionsHtml += '<option value="' + d.domain + '">🔑 Zero Argo SSH: ' + d.domain + '</option>';
+                            });
+                        }
+
+                        if (!optionsHtml) {
+                            optionsHtml = '<option value="">-- Menunggu Domain Tunnel --</option>';
+                        }
+
+                        domainSelect.innerHTML = optionsHtml;
+                        if (currentSelected) domainSelect.value = currentSelected;
+
                     } catch(e) {}
                 }
 
@@ -845,7 +897,6 @@ const server = http.createServer(async (req, res) => {
                     if (!response.ok) return;
                     const data = await response.json();
                     if (data.uuid) document.getElementById('uuidInput').value = data.uuid;
-                    if (data.domain) document.getElementById('hostInput').value = data.domain;
                     window.serverActivePaths = data.paths;
                   } catch (e) {}
                 }
@@ -855,11 +906,17 @@ const server = http.createServer(async (req, res) => {
                   if(evt && evt.target) evt.target.classList.add('btn-active');
                   
                   const uuid = document.getElementById('uuidInput').value.trim();
-                  const host = document.getElementById('hostInput').value.trim(); 
+                  const hostSelect = document.getElementById('domainSelect');
+                  const host = hostSelect.value.trim(); 
                   const bugHost = document.getElementById('bugInput').value.trim(); 
                   const area = document.getElementById('output-area');
                   const label = document.getElementById('out-type');
                   const txt = document.getElementById('configText');
+
+                  if (!host || host.includes("Menunggu")) {
+                    alert("Domain Tunnel belum siap / belum dipilih!");
+                    return;
+                  }
 
                   const pathsMapping = window.serverActivePaths || { vless: '/vless-argo', vmess: '/vmess-argo', trojan: '/trojan-argo' };
                   let basePath = pathsMapping[protocol] || '/' + protocol + '-argo';
