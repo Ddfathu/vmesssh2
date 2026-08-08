@@ -20,9 +20,12 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
-const PORT = process.env.PORT || 8081; 
+const PORT = 8081; 
+
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
+
 const ARGO_PORT = 8001;            
+
 const CFPORT = process.env.CFPORT || 443;                  
 const NAME = process.env.NAME || 'ddfathu';                        
 
@@ -43,9 +46,10 @@ let cachedSshOnline = "0 User";
 let cachedUserListDetails = "Semua user offline";
 
 if (!fs.existsSync(FILE_PATH)) {
-  try { fs.mkdirSync(FILE_PATH, { recursive: true }); } catch(e) {}
+  fs.mkdirSync(FILE_PATH);
 }
 
+// FUNGSI MENDAPATKAN CFIP AKTIF
 function getActiveCfip() {
     try {
         if (fs.existsSync(CFIP_FILE)) {
@@ -197,21 +201,19 @@ function listSsh() {
     try {
         const users = [];
         const dbInfo = loadDb();
-        if (fs.existsSync('/etc/passwd')) {
-            const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
-            const lines = passwdContent.split('\n');
+        const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
+        const lines = passwdContent.split('\n');
+        
+        for (let line of lines) {
+            if (!line.trim()) continue;
+            const parts = line.split(':');
+            const username = parts[0];
+            const uid = parseInt(parts[2], 10);
+            const shell = parts[parts.length - 1];
             
-            for (let line of lines) {
-                if (!line.trim()) continue;
-                const parts = line.split(':');
-                const username = parts[0];
-                const uid = parseInt(parts[2], 10);
-                const shell = parts[parts.length - 1];
-                
-                if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
-                    const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
-                    users.push({ username, uid, shell, ...extra });
-                }
+            if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
+                const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
+                users.push({ username, uid, shell, ...extra });
             }
         }
         return { status: "success", total: users.length, users: users };
@@ -226,7 +228,9 @@ function addSsh(username, password, ipAddr, userAgent) {
         return { status: "error", message: "Username/Password mengandung karakter ilegal!" };
     }
     try {
-        try { execSync(`useradd -m -s /bin/bash ${username} 2>/dev/null`); execSync(`echo '${username}:${password}' | chpasswd 2>/dev/null`); } catch(e) {}
+        execSync(`useradd -m -s /bin/bash ${username}`);
+        execSync(`echo '${username}:${password}' | chpasswd`);
+        
         const dbInfo = loadDb();
         dbInfo[username] = { password, ip: ipAddr, user_agent: userAgent };
         saveDb(dbInfo);
@@ -246,14 +250,14 @@ function addSsh(username, password, ipAddr, userAgent) {
             `================================`;
         return { status: "success", message: accountDetails };
     } catch (e) {
-        return { status: "error", message: `Gagal membuat user.` };
+        return { status: "error", message: `Gagal membuat user. Username mungkin sudah terpakai.` };
     }
 }
 
 function deleteSsh(username) {
     if (!username || !/^[a-zA-Z0-9_-]+$/.test(username)) return { status: "error", message: "Username ilegal!" };
     try {
-        try { execSync(`userdel -r ${username} 2>/dev/null`); } catch(e) {}
+        execSync(`userdel -r ${username}`);
         const dbInfo = loadDb();
         if (dbInfo[username]) {
             delete dbInfo[username];
@@ -314,7 +318,7 @@ function getSystemArchitecture() { return os.arch().includes('arm') ? 'arm' : 'a
 function downloadFile(fileName, fileUrl, callback) {
   if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
   const writer = fs.createWriteStream(fileName);
-  axios({ method: 'get', url: fileUrl, responseType: 'stream', timeout: 10000 }).then(response => {
+  axios({ method: 'get', url: fileUrl, responseType: 'stream' }).then(response => {
     response.data.pipe(writer);
     writer.on('finish', () => { writer.close(); callback(null, fileName); });
     writer.on('error', err => { fs.unlink(fileName, () => {}); callback(err.message); });
@@ -322,18 +326,32 @@ function downloadFile(fileName, fileUrl, callback) {
 }
 
 async function downloadFilesAndRun() {
-  try {
-    const architecture = getSystemArchitecture();
-    const filesToDownload = architecture === 'arm' ? 
-      [{ fileName: webPath, fileUrl: "https://arm64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://arm64.ssss.nyc.mn/bot" }] :
-      [{ fileName: webPath, fileUrl: "https://amd64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://amd64.ssss.nyc.mn/bot" }];
+  const architecture = getSystemArchitecture();
+  const filesToDownload = architecture === 'arm' ? 
+    [{ fileName: webPath, fileUrl: "https://arm64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://arm64.ssss.nyc.mn/bot" }] :
+    [{ fileName: webPath, fileUrl: "https://amd64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://amd64.ssss.nyc.mn/bot" }];
 
-    for (let fileInfo of filesToDownload) {
-      await new Promise((resolve) => { downloadFile(fileInfo.fileName, fileInfo.fileUrl, () => resolve()); });
+  for (let fileInfo of filesToDownload) {
+    await new Promise((resolve, reject) => { downloadFile(fileInfo.fileName, fileInfo.fileUrl, (err) => err ? reject(err) : resolve()); });
+  }
+  fs.chmodSync(webPath, 0o775); fs.chmodSync(botPath, 0o775);
+
+  exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+  
+  if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
+    const singleToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
+    if (singleToken) {
+      restartSingleTunnel(singleToken);
+    } else {
+      let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
+      exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
     }
-    if (fs.existsSync(webPath)) try { fs.chmodSync(webPath, 0o775); exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`); } catch(e) {}
-    if (fs.existsSync(botPath)) try { fs.chmodSync(botPath, 0o775); exec(`nohup ${botPath} tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT} >/dev/null 2>&1 &`); } catch(e) {}
-  } catch(e) {}
+  } else {
+    let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
+    exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+  }
+
+  await new Promise(r => setTimeout(r, 5000));
 }
 
 async function extractDomains() {
@@ -349,20 +367,18 @@ async function extractDomains() {
   } catch (e) {}
 }
 
-async function getMetaInfo() { try { const res = await axios.get('https://api.ip.sb/geoip', { timeout: 3000 }); return `${res.data.country_code}-${res.data.isp}`.replace(/\s+/g, '_'); } catch(e) { return 'RailwayServer'; } }
+async function getMetaInfo() { try { const res = await axios.get('https://api.ip.sb/geoip'); return `${res.data.country_code}-${res.data.isp}`.replace(/\s+/g, '_'); } catch(e) { return 'RailwayServer'; } }
 async function generateLinks(argoDomain) {
-  try {
-    const ISP = await getMetaInfo(); const nodeName = `${NAME}-${ISP}`;
-    const activeCfip = getActiveCfip();
-    const defaultVless = readPathsFromFile('pathvless.txt', '/vless-argo')[0];
-    const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
-    const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
-    
-    const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
-    const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
-    subContent = Buffer.from(subTxt).toString('base64');
-    fs.writeFileSync(subPath, subContent);
-  } catch(e) {}
+  const ISP = await getMetaInfo(); const nodeName = `${NAME}-${ISP}`;
+  const activeCfip = getActiveCfip();
+  const defaultVless = readPathsFromFile('pathvless.txt', '/vless-argo')[0];
+  const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
+  const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
+  
+  const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+  const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
+  subContent = Buffer.from(subTxt).toString('base64');
+  fs.writeFileSync(subPath, subContent);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -394,6 +410,20 @@ const server = http.createServer(async (req, res) => {
         }));
     }
 
+    if (pathName === '/api/logtunnel') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end(fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf8') : "Log belum siap.");
+    }
+
+    if (pathName === '/api/lognamed') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        if (fs.existsSync(ZT_LOG_PATH)) {
+            return res.end(fs.readFileSync(ZT_LOG_PATH, 'utf8'));
+        } else {
+            return res.end("Log Zero Trust belum terbuat atau file /tmp/named_tunnel.log tidak ditemukan.");
+        }
+    }
+
     if (pathName === '/api/setup-pass') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         const newPass = query.pass ? query.pass.trim() : "";
@@ -417,19 +447,19 @@ const server = http.createServer(async (req, res) => {
     if (pathName === '/api/set-token') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
         
         const singleToken = query.token !== undefined ? query.token.trim() : null;
         if (singleToken !== null) restartSingleTunnel(singleToken);
 
-        return res.end(JSON.stringify({ status: "success", message: "Token berhasil disimpan! Restarting tunnel..." }));
+        return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
     }
 
     if (pathName === '/api/set-cfip') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
         const newIp = query.ip ? query.ip.trim() : "";
         if (newIp) {
@@ -445,59 +475,78 @@ const server = http.createServer(async (req, res) => {
     if (pathName === '/api/set-xray') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
 
         if (query.dns) fs.writeFileSync(XRAY_DNS_FILE, query.dns.trim());
         if (query.net) fs.writeFileSync(XRAY_NET_FILE, query.net.trim());
 
         await generateConfig();
-        try { exec(`pkill -9 -f '${webName}' && nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`); } catch(e) {}
+        try {
+            exec(`pkill -9 -f '${webName}' && nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+        } catch(e) {}
+
         if (currentActiveDomain) generateLinks(currentActiveDomain);
 
         return res.end(JSON.stringify({ status: "success", message: "Pengaturan DNS & Network VMess Berhasil Diperbarui!" }));
     }
 
     if (pathName === '/api/add') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(addSsh(query.user, query.pass, ipAddr, userAgent))); }
-    if (pathName === '/api/delete') { res.writeHead(200, { 'Content-Type': 'application/json' }); if (!verifyAdminPassword(query.token)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" })); return res.end(JSON.stringify(deleteSsh(query.user))); }
-    if (pathName === '/api/list') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(listSsh())); }
-    if (pathName === '/api/login') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(verifyAdminPassword(query.pass) ? { status: "success", token: query.pass } : { status: "error", message: "Password Salah!" })); }
     
-    // ⚡ STATS INSTAN FAST-RESPONSE (BEBAS STUCK LOADING)
+    if (pathName === '/api/delete') { 
+        res.writeHead(200, { 'Content-Type': 'application/json' }); 
+        if (!verifyAdminPassword(query.token)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" })); 
+        return res.end(JSON.stringify(deleteSsh(query.user))); 
+    }
+    
+    if (pathName === '/api/list') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(listSsh())); }
+    
+    if (pathName === '/api/login') { 
+        res.writeHead(200, { 'Content-Type': 'application/json' }); 
+        const isPassConfigured = getAdminPassword() !== null;
+        if (!isPassConfigured) {
+            return res.end(JSON.stringify({ status: "not_configured", message: "Password Admin belum pernah dibuat!" }));
+        }
+        return res.end(JSON.stringify(verifyAdminPassword(query.pass) ? { status: "success", token: query.pass } : { status: "error", message: "Password Salah!" })); 
+    }
+    
     if (pathName === '/api/stats') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         
-        let cpus = os.cpus();
-        let cpuModel = cpus && cpus.length > 0 ? cpus[0].model : "Linux Virtual Core";
-        let ramTotal = (os.totalmem()/1024/1024/1024).toFixed(2) + " GB";
-        let ramUsed = ((os.totalmem()-os.freemem())/1024/1024/1024).toFixed(2) + " GB";
-        let uptimeHours = (os.uptime()/3600).toFixed(2) + " Hours";
-
+        let hwInfo = { 
+            cpu_model: os.cpus()[0] ? os.cpus()[0].model : "Linux Core Engine", 
+            ram_total: (os.totalmem()/1024/1024/1024).toFixed(2)+" GB", 
+            ram_used: ((os.totalmem()-os.freemem())/1024/1024/1024).toFixed(2)+" GB", 
+            disk_usage: cachedDiskUsage, 
+            uptime: (os.uptime()/3600).toFixed(2)+" Hours", 
+            ssh_online: cachedSshOnline, 
+            user_list_details: cachedUserListDetails 
+        };
+        
+        if (fs.existsSync(STATS_PATH)) { try { hwInfo = { ...hwInfo, ...JSON.parse(fs.readFileSync(STATS_PATH, 'utf8')) }; } catch (e) {} }
+        
         let quickUrl = currentActiveDomain || "Menunggu Quick Tunnel...";
         let ztSshDomains = getDomainsByPort(['8880', '8881']);
         let ztVmessDomains = getDomainsByPort(['8001']);
+        let passConfigured = getAdminPassword() !== null;
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
             ? `${process.env.RAILWAY_TCP_PROXY_DOMAIN}:${process.env.RAILWAY_TCP_PROXY_PORT}`
             : (process.env.SNI || "Tidak Aktif");
-
+        
+        let cleanOnlineStr = String(hwInfo.ssh_online).replace(/👥/g, '').replace(/Active/g, '').replace(/Users/g, '').trim();
         return res.end(JSON.stringify({ 
-            status: "ONLINE",
             active_cfip: getActiveCfip(), 
             dns_mode: getXrayDnsMode(),
             net_mode: getXrayNetworkMode(),
             quick_url: quickUrl, 
             zt_domains: ztSshDomains, 
             zt_vmess_domains: ztVmessDomains, 
-            pass_configured: getAdminPassword() !== null, 
+            pass_configured: passConfigured, 
             railway_url: rlwyUrl, 
-            cpu_model: cpuModel,
-            ram_total: ramTotal,
-            ram_used: ramUsed,
-            disk_usage: cachedDiskUsage,
-            uptime: uptimeHours,
-            ssh_online: cachedSshOnline || "0 Users",
-            user_list_details: cachedUserListDetails || "Semua user offline"
+            status: "ONLINE", 
+            ...hwInfo, 
+            ssh_online: cleanOnlineStr || "0 Users" 
         }));
     }
 
@@ -726,7 +775,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI: - Masukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -773,7 +822,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES): (Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     
                     if (inputToken === null) return;
 
@@ -794,7 +843,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\nContoh: 104.17.3.81\n\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP): Contoh: 104.17.3.81 (Kosongkan lalu klik OK untuk reset ke default)");
                     
                     if (inputIp === null) return;
 
@@ -830,7 +879,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN: Masukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -840,10 +889,9 @@ const server = http.createServer(async (req, res) => {
                     } catch(e) { alert("Gagal mengupdate password!"); }
                 }
 
-                // ⚡ PERBAIKAN UPDATESTATS BISA DIBACA RELATIF TANPA ERRROR
                 async function updateStats() {
                     try {
-                        let res = await fetch(window.location.origin + '/api/stats');
+                        let res = await fetch('/api/stats');
                         if (!res.ok) return;
                         let data = await res.json();
                         isPassConfigured = data.pass_configured;
@@ -915,7 +963,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function fetchAccounts() {
                     try {
-                        let res = await fetch(window.location.origin + '/api/list'); 
+                        let res = await fetch('/api/list'); 
                         let data = await res.json(); 
                         let tbody = document.getElementById('ssh-table-body'); 
                         tbody.innerHTML = "";
@@ -928,12 +976,12 @@ const server = http.createServer(async (req, res) => {
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN: Username: " + userObj.username + " Password: " + userObj.password); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
                     try {
-                        let res = await fetch(window.location.origin + '/api/add?user='+user+'&pass='+pass); let data = await res.json();
+                        let res = await fetch('/api/add?user='+user+'&pass='+pass); let data = await res.json();
                         if(data.status === "success") { msg.innerText = ""; resBox.innerText = data.message; resBox.style.display = "block"; copyBtn.style.display = "block"; document.getElementById('ssh-user').value = ""; document.getElementById('ssh-pass').value = ""; fetchAccounts(); } else { msg.style.color = "#ef4444"; msg.innerText = data.message; resBox.style.display = "none"; copyBtn.style.display = "none"; }
                     } catch(e) { msg.innerText = "Gagal memproses API"; }
                 }
@@ -942,7 +990,7 @@ const server = http.createServer(async (req, res) => {
                     if(!adminToken) { alert("Aksi Ilegal! Lu harus Login Admin dulu Bos!"); return; }
                     if(confirm("Hapus akun SSH "+username+"?")) {
                         try {
-                            let res = await fetch(window.location.origin + '/api/delete?user='+username+'&token='+adminToken); let data = await res.json();
+                            let res = await fetch('/api/delete?user='+username+'&token='+adminToken); let data = await res.json();
                             if(data.status === "success") { fetchAccounts(); } else { alert(data.message); }
                         } catch(e) {}
                     }
@@ -961,7 +1009,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function fetchServerInfo() {
                   try {
-                    const response = await fetch(window.location.origin + '/__info');
+                    const response = await fetch('/__info');
                     if (!response.ok) return;
                     const data = await response.json();
                     if (data.uuid) document.getElementById('uuidInput').value = data.uuid;
@@ -1035,19 +1083,7 @@ const server = http.createServer(async (req, res) => {
                   area.style.display = 'block';
                 }
 
-                function copyOutConfig() {
-                  navigator.clipboard.writeText(document.getElementById('configText').innerText);
-                  alert('Config Berhasil Disalin!');
-                }
-
-                // ⚡ TRIGGER REFRESH STATS LANGSUNG PAS DI-LOAD
-                document.addEventListener("DOMContentLoaded", function() {
-                    updateStats();
-                    fetchAccounts();
-                    fetchServerInfo();
-                });
-
-                setInterval(updateStats, 3000); 
+                setInterval(updateStats, 2000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
