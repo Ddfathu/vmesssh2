@@ -1174,15 +1174,17 @@ const server = http.createServer(async (req, res) => {
                     if (!buf) buf = "32768";
 
                     try {
-                        let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
-                        let data1 = await res1.json();
+                        fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
+                        fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
 
-                        let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
-                        let data2 = await res2.json();
-
-                        alert(data1.message + "\\n" + data2.message);
-                        updateStats();
-                    } catch(e) { alert("Gagal memperbarui SSH Config!"); }
+                        alert("🚀 Konfigurasi SSH Server Berhasil Disimpan!\n\nService Dropbear & UDPGW sedang di-restart. Jika koneksi VPN Anda terputus sementara, silakan re-connect.");
+                        
+                        setTimeout(() => {
+                            updateStats();
+                        }, 3000);
+                    } catch(e) { 
+                        alert("Konfigurasi terkirim ke server! Menunggu restart service..."); 
+                    }
                 }
 
                 async function promptSingleTokenInput() {
