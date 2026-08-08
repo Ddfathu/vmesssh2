@@ -566,7 +566,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
-    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW)
+    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW) - PERBAIKAN LOGIKA RESTART DROPBEAR
     if (pathName === '/api/set-system') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -584,9 +584,29 @@ const server = http.createServer(async (req, res) => {
         if (banner) {
             try {
                 fs.writeFileSync('/etc/dropbear_banner', banner);
-                exec("pkill dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W 1048576 -K 15 -I 300");
-            } catch(e) {}
+            } catch(e) {
+                console.error("Gagal tulis banner:", e);
+            }
+        } else {
+            const defaultBanner = "==================================================\n" +
+                                  "          👑 SELAMAT MENIKMATI 👑\n" +
+                                  "       🥳 SSH SERVER PAAS RAILWAY 🥳\n" +
+                                  "==================================================\n" +
+                                  " powered by : d e d e f a t h u\n" +
+                                  "==================================================\n";
+            try { fs.writeFileSync('/etc/dropbear_banner', defaultBanner); } catch(e){}
         }
+
+        // Execution Kill & Restart Dropbear Terpisah (Anti Fail)
+        require('child_process').exec("pkill -9 dropbear", () => {
+            setTimeout(() => {
+                const wsCfg = getWsProxyConfig();
+                const sshPort = wsCfg.sshPort || 22;
+                require('child_process').exec(`/usr/sbin/dropbear -p 127.0.0.1:${sshPort} -b /etc/dropbear_banner -W 1048576 -K 15 -I 300`, (err) => {
+                    if (err) console.error("Gagal restart Dropbear:", err.message);
+                });
+            }, 1000);
+        });
 
         // Apply BBR Switch secara Real-Time ke Sysctl Kernel
         try {
@@ -859,7 +879,7 @@ const server = http.createServer(async (req, res) => {
                         <!-- SUB-BOX SISTEM FITUR: BANNER, BBR, UDPGW -->
                         <div style="margin-top:12px; border-top:1px solid #1f1938; padding-top:10px;">
                             <div>
-                                <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML ALLOWED)</label>
+                                <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML / TEXT ALLOWED)</label>
                                 <textarea id="bannerInput" class="input-ssh" style="height:60px; font-family:monospace; font-size:11px;" placeholder="Kosongkan untuk memakai banner standar..."></textarea>
                             </div>
 
@@ -1430,7 +1450,7 @@ const server = http.createServer(async (req, res) => {
                       let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : (netType === 'h2' ? '/h2-path' : pathBug), tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(pathBug))) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : pathBug), tls: "tls", sni: host };
                     }
                   }
 
