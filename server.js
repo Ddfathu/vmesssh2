@@ -8,8 +8,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require('crypto');
 const { promisify } = require('util');
-const exec = promisify(require('child_process').exec);
-const { execSync } = require('child_process');
+const execPromise = promisify(require('child_process').exec);
+const { exec, execSync } = require('child_process');
 
 // ========================================================
 // VARIABEL KONFIGURASI GLOBAL
@@ -162,17 +162,16 @@ function saveDb(data) {
 let currentActiveDomain = '';
 
 function restartSingleTunnel(newToken) {
-    const cp = require('child_process');
-    cp.exec("pkill -9 -f 'cloudflared'", () => {
+    exec("pkill -9 -f 'cloudflared'", () => {
         setTimeout(() => {
             if (newToken && newToken.trim()) {
                 fs.writeFileSync(ZT_SINGLE_TOKEN_FILE, newToken.trim());
-                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
+                exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
             } else {
                 if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) fs.unlinkSync(ZT_SINGLE_TOKEN_FILE);
                 if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token Dihapus.");
                 let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-                cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+                exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
             }
         }, 1000);
     });
@@ -427,8 +426,7 @@ async function downloadFilesAndRun() {
   }
   fs.chmodSync(webPath, 0o775); fs.chmodSync(botPath, 0o775);
 
-  const cp = require('child_process');
-  cp.exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+  exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
   
   if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
     const singleToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
@@ -436,11 +434,11 @@ async function downloadFilesAndRun() {
       restartSingleTunnel(singleToken);
     } else {
       let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-      cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+      exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
     }
   } else {
     let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-    cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+    exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
   }
 
   await new Promise(r => setTimeout(r, 5000));
@@ -547,10 +545,9 @@ const server = http.createServer(async (req, res) => {
         saveNetworkSettings(dns_type, custom_dns, engine);
         await generateConfig();
         
-        const cp = require('child_process');
-        cp.exec(`pkill -9 -f '${webName}'`, () => {
+        exec(`pkill -9 -f '${webName}'`, () => {
             setTimeout(() => {
-                cp.exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+                exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
             }, 1000);
         });
 
@@ -582,39 +579,53 @@ const server = http.createServer(async (req, res) => {
 
         saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
 
-        const cp = require('child_process');
-
-        // Update Banner Dropbear Instan secara Real-Time
+        // 1. Update Banner Dropbear Instan
         if (banner) {
             try {
                 fs.writeFileSync('/etc/dropbear_banner', banner);
-                cp.exec("pkill -9 dropbear", () => {
-                    setTimeout(() => {
-                        cp.exec("usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W 1048576 -K 15 -I 300");
-                    }, 1000);
-                });
-            } catch(e) {}
+            } catch(e) {
+                console.error("Gagal tulis banner:", e);
+            }
+        } else {
+            const defaultBanner = "==================================================\n" +
+                                  "          👑 SELAMAT MENIKMATI 👑\n" +
+                                  "       🥳 SSH SERVER PAAS RAILWAY 🥳\n" +
+                                  "==================================================\n" +
+                                  " powered by : d e d e f a t h u\n" +
+                                  "==================================================\n";
+            try { fs.writeFileSync('/etc/dropbear_banner', defaultBanner); } catch(e){}
         }
 
-        // Kill badvpn-udpgw lama & restart ke port baru
-        cp.exec("pkill -9 badvpn-udpgw", () => {
+        // 2. Restart Dropbear Terpisah
+        exec("pkill -9 dropbear", () => {
+            setTimeout(() => {
+                const wsCfg = getWsProxyConfig();
+                const sshPort = wsCfg.sshPort || 22;
+                exec(`/usr/sbin/dropbear -p 127.0.0.1:${sshPort} -b /etc/dropbear_banner -W 1048576 -K 15 -I 300`, (err) => {
+                    if (err) console.error("Gagal restart Dropbear:", err.message);
+                });
+            }, 1000);
+        });
+
+        // 3. Kill badvpn-udpgw lama & restart ke port baru secara real-time
+        exec("pkill -9 badvpn-udpgw", () => {
             setTimeout(() => {
                 if (fs.existsSync('/usr/local/bin/badvpn-udpgw')) {
-                    cp.exec(`nohup /usr/local/bin/badvpn-udpgw --listen-addr 0.0.0.0:${udpgw_port} --max-clients ${udpgw_max_clients} --max-connections-for-client 50 >/dev/null 2>&1 &`);
+                    exec(`nohup /usr/local/bin/badvpn-udpgw --listen-addr 0.0.0.0:${udpgw_port} --max-clients ${udpgw_max_clients} --max-connections-for-client 50 >/dev/null 2>&1 &`);
                 }
             }, 1000);
         });
 
-        // Apply BBR Switch secara Real-Time ke Sysctl Kernel
+        // 4. Apply BBR Switch
         try {
             if (enable_bbr === "true") {
-                cp.exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
+                exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
             } else {
-                cp.exec("sysctl -w net.ipv4.tcp_congestion_control=cubic 2>/dev/null");
+                exec("sysctl -w net.ipv4.tcp_congestion_control=cubic 2>/dev/null");
             }
         } catch(e) {}
 
-        return res.end(JSON.stringify({ status: "success", message: "System Config (Banner/BBR/UDPGW) Berhasil Disimpan & Di-apply!" }));
+        return res.end(JSON.stringify({ status: "success", message: `System Config (Banner/BBR/UDPGW:${udpgw_port}) Berhasil Disimpan & Di-apply!` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -876,7 +887,7 @@ const server = http.createServer(async (req, res) => {
                         <!-- SUB-BOX SISTEM FITUR: BANNER, BBR, UDPGW -->
                         <div style="margin-top:12px; border-top:1px solid #1f1938; padding-top:10px;">
                             <div>
-                                <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML ALLOWED)</label>
+                                <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML / TEXT ALLOWED)</label>
                                 <textarea id="bannerInput" class="input-ssh" style="height:60px; font-family:monospace; font-size:11px;" placeholder="Kosongkan untuk memakai banner standar..."></textarea>
                             </div>
 
@@ -1138,11 +1149,11 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                // 🔥 PERBAIKAN TEPAT SASARAN: Tampilkan pesan sukses secara instan, panggil simpan tanpa memicu alert 'Gagal' saat VPN reconnect
-                function saveWsProxySettingUI() {
+                async function saveWsProxySettingUI() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
-                        return;
+                        let loggedIn = await handleAdminAuthBtn();
+                        if (!loggedIn && !adminToken) return;
                     }
 
                     let selPort = document.getElementById('wsPortDropdown').value;
@@ -1162,11 +1173,16 @@ const server = http.createServer(async (req, res) => {
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
-                    fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
-                    fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
+                    try {
+                        let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
+                        let data1 = await res1.json();
 
-                    alert("✅ Konfigurasi SSH & Sistem Berhasil Disimpan!");
-                    setTimeout(updateStats, 2000);
+                        let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
+                        let data2 = await res2.json();
+
+                        alert(data1.message + "\\n" + data2.message);
+                        updateStats();
+                    } catch(e) { alert("Gagal memperbarui SSH Config!"); }
                 }
 
                 async function promptSingleTokenInput() {
@@ -1223,9 +1239,12 @@ const server = http.createServer(async (req, res) => {
                         isPassConfigured = data.pass_configured;
                         checkAdminUI();
 
-                        document.getElementById('cpu').innerText = data.cpu_model; document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; document.getElementById('disk').innerText = data.disk_usage; document.getElementById('uptime').innerText = data.uptime;
+                        document.getElementById('cpu').innerText = data.cpu_model || "N/A"; 
+                        document.getElementById('ram').innerText = (data.ram_used || "0") + " / " + (data.ram_total || "0"); 
+                        document.getElementById('disk').innerText = data.disk_usage || "0%"; 
+                        document.getElementById('uptime').innerText = data.uptime || "0 Hours";
                         let detailActiveList = data.user_list_details || "Semua user offline";
-                        document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
+                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || "0") + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
 
                         if(data.dns_type) {
@@ -1301,8 +1320,8 @@ const server = http.createServer(async (req, res) => {
                             ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>';
                         }
 
-                        document.getElementById('railway-url').innerText = data.railway_url; 
-                        document.getElementById('quick-url').innerText = data.quick_url;
+                        document.getElementById('railway-url').innerText = data.railway_url || "Tidak Aktif"; 
+                        document.getElementById('quick-url').innerText = data.quick_url || "Menunggu Quick Tunnel...";
 
                         let domainSelect = document.getElementById('domainSelect');
                         let currentSelected = domainSelect.value;
@@ -1455,7 +1474,7 @@ const server = http.createServer(async (req, res) => {
                   alert('Config Berhasil Disalin!');
                 }
 
-                setInterval(updateStats, 600000); 
+                setInterval(updateStats, 5000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
@@ -1505,11 +1524,11 @@ server.listen(PORT, () => {
     }, 3000);
 
     setInterval(() => {
-        require('child_process').exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
+        exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
             if (!err && stdout.trim()) cachedDiskUsage = stdout.trim();
         });
 
-        require('child_process').exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
+        exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
             if (!err && stdout.trim()) {
                 const ipLines = stdout.trim().split('\n').filter(Boolean);
                 if (ipLines.length > 0) {
