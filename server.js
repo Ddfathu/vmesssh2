@@ -33,6 +33,7 @@ const LOG_PATH = path.join(FILE_PATH, "boot.log");
 const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 const CFIP_FILE = "/tmp/cfip.txt";
+const NET_SETTING_FILE = "/tmp/net_settings.json";
 
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
@@ -46,7 +47,22 @@ if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH);
 }
 
-// FUNGSI MENDAPATKAN CFIP AKTIF
+// FUNGSI LOAD & SAVE SETTINGAN NETWORK/DNS
+function getNetworkSettings() {
+    try {
+        if (fs.existsSync(NET_SETTING_FILE)) {
+            return JSON.parse(fs.readFileSync(NET_SETTING_FILE, 'utf8'));
+        }
+    } catch(e) {}
+    return { dns: "udp", engine: "ws" };
+}
+
+function saveNetworkSettings(dns, engine) {
+    try {
+        fs.writeFileSync(NET_SETTING_FILE, JSON.stringify({ dns, engine }, null, 2));
+    } catch(e) {}
+}
+
 function getActiveCfip() {
     try {
         if (fs.existsSync(CFIP_FILE)) {
@@ -100,7 +116,6 @@ function saveDb(data) {
 
 let currentActiveDomain = '';
 
-// 🔍 FUNGSI RESTART SINGLE TUNNEL UNTUK SEMUA PORT
 function restartSingleTunnel(newToken) {
     const cp = require('child_process');
     cp.exec("pkill -9 -f 'cloudflared'", () => {
@@ -118,7 +133,6 @@ function restartSingleTunnel(newToken) {
     });
 }
 
-// 🔍 REGEX PARSER UNTUK FILTER DOMAIN DARI INGRESS LOGS
 function getDomainsByPort(targetPorts) {
     const domains = [];
     try {
@@ -252,7 +266,9 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
+// 🔧 HASIL FIX: DYNAMIC CONFIG GENERATION DENGAN REAL BACKEND DOH & GRPC
 async function generateConfig() {
+  const netSettings = getNetworkSettings();
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
   const vmessPaths = readPathsFromFile('pathvmess.txt', '/vmess-argo');
   const trojanPaths = readPathsFromFile('pathtrojan.txt', '/trojan-argo');
@@ -261,32 +277,45 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
+  const isGrpc = netSettings.engine === 'grpc';
+
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: 'vless', settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ 
+        port: cp, listen: "127.0.0.1", protocol: 'vless', 
+        settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, 
+        streamSettings: isGrpc ? 
+            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
+            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
+    }); 
   });
 
   vmessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ 
+        port: cp, listen: "127.0.0.1", protocol: "vmess", 
+        settings: { clients: [{ id: UUID, alterId: 0 }] }, 
+        streamSettings: isGrpc ? 
+            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
+            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
+    }); 
   });
 
   trojanPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
-  });
-
-  // Dukungan Inbound gRPC Engine Tambahan
-  inboundsList.push({
-    port: 3200,
-    listen: "127.0.0.1",
-    protocol: "vless",
-    settings: { clients: [{ id: UUID }], decryption: "none" },
-    streamSettings: { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } },
-    sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
+    inboundsList.push({ 
+        port: cp, listen: "127.0.0.1", protocol: "trojan", 
+        settings: { clients: [{ password: UUID }] }, 
+        streamSettings: isGrpc ? 
+            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
+            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
+    }); 
   });
 
   inboundsList.unshift({
@@ -297,12 +326,18 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
+  // REAL DNS INJECTION BACKEND
+  const dnsServers = netSettings.dns === 'doh' ? 
+    ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"] : 
+    ["8.8.8.8", "1.1.1.1"];
+
   const config = { 
     log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, 
     inbounds: inboundsList, 
-    dns: { servers: ["https://1.1.1.1/dns-query", "8.8.8.8", "1.1.1.1"] }, 
+    dns: { servers: dnsServers }, 
     outbounds: [{ protocol: "freedom", tag: "direct" }] 
   };
+  
   fs.writeFileSync(path.join(FILE_PATH, 'config.json'), JSON.stringify(config, null, 2));
 }
 
@@ -434,6 +469,28 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
+    // 🔑 HASIL FIX: ENDPOINT SET NETWORK SEKARANG KETAT PAKAI VALIDASI ADMIN PASS & SYSTEM RESTART
+    if (pathName === '/api/set-network') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (!verifyAdminPassword(query.pass)) {
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
+        }
+        const dns = query.dns || "udp";
+        const engine = query.engine || "ws";
+        
+        saveNetworkSettings(dns, engine);
+        await generateConfig();
+        
+        // Restart Core Engine Biar Reload Config JSON Terbaru
+        exec(`pkill -9 -f '${webName}'`, () => {
+            setTimeout(() => {
+                exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+            }, 1000);
+        });
+
+        return res.end(JSON.stringify({ status: "success", message: `Konfigurasi berhasil disimpan! DNS: ${dns.toUpperCase()}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
+    }
+
     if (pathName === '/api/set-token') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -446,7 +503,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
     }
 
-    // 🌐 API HANLDER UNTUK SET CFIP MANUAL
     if (pathName === '/api/set-cfip') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -501,13 +557,26 @@ const server = http.createServer(async (req, res) => {
         let ztSshDomains = getDomainsByPort(['8880', '8881']);
         let ztVmessDomains = getDomainsByPort(['8001']);
         let passConfigured = getAdminPassword() !== null;
+        let netSettings = getNetworkSettings();
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
             ? `${process.env.RAILWAY_TCP_PROXY_DOMAIN}:${process.env.RAILWAY_TCP_PROXY_PORT}`
             : (process.env.SNI || "Tidak Aktif");
         
         let cleanOnlineStr = String(hwInfo.ssh_online).replace(/👥/g, '').replace(/Active/g, '').replace(/Users/g, '').trim();
-        return res.end(JSON.stringify({ active_cfip: getActiveCfip(), quick_url: quickUrl, zt_domains: ztSshDomains, zt_vmess_domains: ztVmessDomains, pass_configured: passConfigured, railway_url: rlwyUrl, status: "ONLINE", ...hwInfo, ssh_online: cleanOnlineStr || "0" }));
+        return res.end(JSON.stringify({ 
+            active_cfip: getActiveCfip(), 
+            quick_url: quickUrl, 
+            zt_domains: ztSshDomains, 
+            zt_vmess_domains: ztVmessDomains, 
+            pass_configured: passConfigured, 
+            railway_url: rlwyUrl, 
+            status: "ONLINE", 
+            dns_mode: netSettings.dns,
+            engine_mode: netSettings.engine,
+            ...hwInfo, 
+            ssh_online: cleanOnlineStr || "0" 
+        }));
     }
 
     if (pathName === '/' || pathName === '/index.html') {
@@ -585,7 +654,7 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN KONTROL TUNNEL & CFIP DENGAN DUA FITUR BARU -->
+                <!-- 🔒 MENU ADMIN KONTROL TUNNEL & CFIP -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ PENGATURAN TOKEN & IP CLEAN</span>
@@ -781,12 +850,27 @@ const server = http.createServer(async (req, res) => {
                     return false;
                 }
 
-                function saveDnsNetworkSetting() {
+                // 🔑 FIX JALUR SIMPAN NETWORK DENGAN CEK ADMIN
+                async function saveDnsNetworkSetting() {
+                    if (!adminToken) {
+                        alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
+                        let loggedIn = await handleAdminAuthBtn();
+                        if (!loggedIn && !adminToken) return;
+                    }
+
                     let dns = document.getElementById('dnsSelect').value;
                     let engine = document.getElementById('engineSelect').value;
-                    document.getElementById('display-dns').innerText = dns.toUpperCase();
-                    document.getElementById('display-engine').innerText = engine.toUpperCase();
-                    alert("Setting DNS (" + dns.toUpperCase() + ") & Engine Network (" + engine.toUpperCase() + ") berhasil disimpan!");
+
+                    try {
+                        let res = await fetch('/api/set-network?pass=' + encodeURIComponent(adminToken) + '&dns=' + dns + '&engine=' + engine);
+                        let data = await res.json();
+                        alert(data.message);
+                        if (data.status === "success") {
+                            updateStats();
+                        }
+                    } catch(e) {
+                        alert("Gagal menyimpan konfigurasi ke backend!");
+                    }
                 }
 
                 async function promptSingleTokenInput() {
@@ -847,6 +931,15 @@ const server = http.createServer(async (req, res) => {
                         let detailActiveList = data.user_list_details || "Semua user offline";
                         document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
+
+                        if(data.dns_mode) {
+                            document.getElementById('dnsSelect').value = data.dns_mode;
+                            document.getElementById('display-dns').innerText = data.dns_mode.toUpperCase();
+                        }
+                        if(data.engine_mode) {
+                            document.getElementById('engineSelect').value = data.engine_mode;
+                            document.getElementById('display-engine').innerText = data.engine_mode.toUpperCase();
+                        }
 
                         let ztContainer = document.getElementById('zt-container');
                         if (data.zt_domains && data.zt_domains.length > 1) {
