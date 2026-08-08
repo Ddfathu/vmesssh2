@@ -20,7 +20,8 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
-const PORT = 8081; 
+// ⚡ BIND PORT KE ENVIRONMENT RAILWAY
+const PORT = process.env.PORT || 8081; 
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
 const ARGO_PORT = 8001;            
 const CFPORT = process.env.CFPORT || 443;                  
@@ -68,7 +69,7 @@ function getXrayDnsMode() {
             return fs.readFileSync(XRAY_DNS_FILE, 'utf8').trim();
         }
     } catch(e) {}
-    return 'udp'; // default: udp
+    return 'udp';
 }
 
 function getXrayNetworkMode() {
@@ -77,7 +78,7 @@ function getXrayNetworkMode() {
             return fs.readFileSync(XRAY_NET_FILE, 'utf8').trim();
         }
     } catch(e) {}
-    return 'ws'; // default: ws
+    return 'ws';
 }
 
 function getSshSettings() {
@@ -306,7 +307,7 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
-  const netType = getXrayNetworkMode(); // ws / grpc
+  const netType = getXrayNetworkMode();
 
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
@@ -323,7 +324,7 @@ async function generateConfig() {
   trojanPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   inboundsList.unshift({
@@ -334,7 +335,6 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  // Opsi DNS: UDP Direct Fast Mode vs DoH Mode
   const dnsServers = getXrayDnsMode() === 'udp' ? ["8.8.8.8", "1.1.1.1"] : ["https+local://8.8.8.8/dns-query"];
 
   const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: dnsServers }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
@@ -467,7 +467,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Token berhasil disimpan! Tunnel direstart..." }));
     }
 
-    // 🌐 API HANDLER X-RAY SETTINGS
     if (pathName === '/api/set-xray') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
@@ -483,7 +482,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Pengaturan X-Ray Berhasil Diperbarui & Engine Direstart!" }));
     }
 
-    // 🌐 API HANDLER SSH SETTINGS
     if (pathName === '/api/set-ssh-config') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
@@ -497,7 +495,6 @@ const server = http.createServer(async (req, res) => {
 
         saveSshSettings(sshData);
 
-        // Applying Dropbear settings live
         exec(`pkill -9 dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W ${sshData.dropbear_buffer} -K ${sshData.dropbear_keepalive} -I ${sshData.dropbear_timeout}`);
 
         if (query.banner !== undefined) {
@@ -569,7 +566,6 @@ const server = http.createServer(async (req, res) => {
                 body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #090d16; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column; overflow-x: hidden; }
                 .container { background: #111827; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8); border: 1px solid #1f2937; margin-bottom: 20px; position: relative; }
                 
-                /* ☰ HAMBURGER MENU SIDEBAR STYLING */
                 .hamburger-btn { position: absolute; top: 20px; left: 20px; background: #1f2937; border: 1px solid #334155; color: #38bdf8; font-size: 20px; padding: 6px 12px; border-radius: 8px; cursor: pointer; z-index: 10; font-weight: bold; }
                 .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); display: none; z-index: 100; backdrop-filter: blur(3px); }
                 .sidebar-drawer { position: fixed; top: 0; left: -320px; width: 300px; height: 100vh; background: #0f172a; border-right: 1px solid #334155; z-index: 101; transition: 0.3s ease-in-out; padding: 20px; overflow-y: auto; box-shadow: 10px 0 25px rgba(0,0,0,0.5); }
@@ -630,7 +626,6 @@ const server = http.createServer(async (req, res) => {
             </style>
         </head>
         <body>
-            <!-- OVERLAY & SIDEBAR MENU DRAWER ☰ -->
             <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
             <div class="sidebar-drawer" id="sidebar">
                 <div class="sidebar-title">
@@ -638,7 +633,6 @@ const server = http.createServer(async (req, res) => {
                     <button class="close-sidebar" onclick="toggleSidebar()">✕</button>
                 </div>
 
-                <!-- CATEGORY 1: X-RAY SETTINGS -->
                 <div style="background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;">
                     <span style="font-size: 12px; font-weight: bold; color: #38bdf8; display: block; margin-bottom: 10px;">⚡ X-RAY SETTINGS</span>
                     
@@ -666,7 +660,6 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-save-sb" onclick="saveXraySettingsUI()">💾 SIMPAN SETTINGAN X-RAY</button>
                 </div>
 
-                <!-- CATEGORY 2: SSH SETTINGS -->
                 <div style="background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
                     <span style="font-size: 12px; font-weight: bold; color: #a855f7; display: block; margin-bottom: 10px;">🔑 SSH & DROPBEAR SETTINGS</span>
 
@@ -724,7 +717,6 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN TOKEN TUNNEL -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ TOKEN CLOUDFLARE ARGO</span>
@@ -753,7 +745,6 @@ const server = http.createServer(async (req, res) => {
                     </table>
                 </div>
 
-                <!-- DOMAIN TUNNEL SSH (PORT 8880) -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -762,7 +753,6 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
-                <!-- DOMAIN TUNNEL VMESS (PORT 8001) -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -974,7 +964,6 @@ const server = http.createServer(async (req, res) => {
                         let detailActiveList = data.user_list_details || "Semua user offline";
                         document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
 
-                        // Populate values to Sidebar Drawer
                         if (data.active_cfip) document.getElementById('sb-cfip').value = data.active_cfip;
                         if (data.dns_mode) document.getElementById('sb-dns').value = data.dns_mode;
                         if (data.net_mode) document.getElementById('sb-net').value = data.net_mode;
@@ -986,7 +975,6 @@ const server = http.createServer(async (req, res) => {
                             document.getElementById('sb-ws-buffer').value = data.ssh_settings.wsproxy_buffer || "64";
                         }
 
-                        // Handler Domain SSH (Port 8880/8881)
                         let ztContainer = document.getElementById('zt-container');
                         if (data.zt_domains && data.zt_domains.length > 1) {
                             let dropdownHtml = '<select id="named-url" class="select-zt" onmousedown="event.stopPropagation()">';
@@ -999,7 +987,6 @@ const server = http.createServer(async (req, res) => {
                             ztContainer.innerHTML = '<div class="url-box" id="named-url">Menghubungkan Domain SSH...</div>';
                         }
 
-                        // Handler Domain VMess (Port 8001)
                         let ztVmessContainer = document.getElementById('zt-vmess-container');
                         if (data.zt_vmess_domains && data.zt_vmess_domains.length > 1) {
                             let dropdownVmessHtml = '<select id="vmess-named-url" class="select-zt" style="border-color:#0284c7; color:#38bdf8;" onmousedown="event.stopPropagation()">';
@@ -1045,7 +1032,7 @@ const server = http.createServer(async (req, res) => {
                         if(data.status === "success" && data.users.length > 0) {
                             savedUsersData = data.users; 
                             data.users.forEach(u => {
-                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\\''+u.username+'\\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\\''+u.username+'\\')">HAPUS</button></div></td></tr>';
+                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\''+u.username+'\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\''+u.username+'\')">HAPUS</button></div></td></tr>';
                             });
                             checkAdminUI();
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
