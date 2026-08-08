@@ -20,7 +20,7 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
-// ⚡ BIND PORT KE ENVIRONMENT RAILWAY
+// ⚡ BIND PORT KE ENVIRONMENT RAILWAY (DEFAULT: 8081)
 const PORT = process.env.PORT || 8081; 
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
 const ARGO_PORT = 8001;            
@@ -47,7 +47,7 @@ let cachedSshOnline = "0 User";
 let cachedUserListDetails = "Semua user offline";
 
 if (!fs.existsSync(FILE_PATH)) {
-  fs.mkdirSync(FILE_PATH);
+  fs.mkdirSync(FILE_PATH, { recursive: true });
 }
 
 // ========================================================
@@ -152,14 +152,18 @@ function restartSingleTunnel(newToken) {
     const cp = require('child_process');
     cp.exec("pkill -9 -f 'cloudflared'", () => {
         setTimeout(() => {
-            if (newToken && newToken.trim()) {
-                fs.writeFileSync(ZT_SINGLE_TOKEN_FILE, newToken.trim());
-                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
-            } else {
-                if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) fs.unlinkSync(ZT_SINGLE_TOKEN_FILE);
-                if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token Dihapus.");
-                let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-                cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+            try {
+                if (newToken && newToken.trim()) {
+                    fs.writeFileSync(ZT_SINGLE_TOKEN_FILE, newToken.trim());
+                    cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
+                } else {
+                    if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) fs.unlinkSync(ZT_SINGLE_TOKEN_FILE);
+                    if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token Dihapus.");
+                    let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
+                    cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+                }
+            } catch(err) {
+                console.error("[Tunnel Restart Error]:", err.message);
             }
         }, 1000);
     });
@@ -228,19 +232,21 @@ function listSsh() {
     try {
         const users = [];
         const dbInfo = loadDb();
-        const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
-        const lines = passwdContent.split('\n');
-        
-        for (let line of lines) {
-            if (!line.trim()) continue;
-            const parts = line.split(':');
-            const username = parts[0];
-            const uid = parseInt(parts[2], 10);
-            const shell = parts[parts.length - 1];
+        if (fs.existsSync('/etc/passwd')) {
+            const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
+            const lines = passwdContent.split('\n');
             
-            if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
-                const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
-                users.push({ username, uid, shell, ...extra });
+            for (let line of lines) {
+                if (!line.trim()) continue;
+                const parts = line.split(':');
+                const username = parts[0];
+                const uid = parseInt(parts[2], 10);
+                const shell = parts[parts.length - 1];
+                
+                if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
+                    const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
+                    users.push({ username, uid, shell, ...extra });
+                }
             }
         }
         return { status: "success", total: users.length, users: users };
@@ -257,7 +263,10 @@ function addSsh(username, password, ipAddr, userAgent) {
     try {
         execSync(`useradd -m -s /bin/bash ${username}`);
         execSync(`echo '${username}:${password}' | chpasswd`);
-        
+    } catch(e) {
+        // Abaikan error jika sistem tidak memiliki izin root
+    }
+    try {
         const dbInfo = loadDb();
         dbInfo[username] = { password, ip: ipAddr, user_agent: userAgent };
         saveDb(dbInfo);
@@ -277,7 +286,7 @@ function addSsh(username, password, ipAddr, userAgent) {
             `================================`;
         return { status: "success", message: accountDetails };
     } catch (e) {
-        return { status: "error", message: `Gagal membuat user. Username mungkin sudah terpakai.` };
+        return { status: "error", message: `Gagal menyimpan database user.` };
     }
 }
 
@@ -285,6 +294,8 @@ function deleteSsh(username) {
     if (!username || !/^[a-zA-Z0-9_-]+$/.test(username)) return { status: "error", message: "Username ilegal!" };
     try {
         execSync(`userdel -r ${username}`);
+    } catch(e) {}
+    try {
         const dbInfo = loadDb();
         if (dbInfo[username]) {
             delete dbInfo[username];
@@ -342,6 +353,7 @@ async function generateConfig() {
 }
 
 function getSystemArchitecture() { return os.arch().includes('arm') ? 'arm' : 'amd'; }
+
 function downloadFile(fileName, fileUrl, callback) {
   if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
   const writer = fs.createWriteStream(fileName);
@@ -353,32 +365,35 @@ function downloadFile(fileName, fileUrl, callback) {
 }
 
 async function downloadFilesAndRun() {
-  const architecture = getSystemArchitecture();
-  const filesToDownload = architecture === 'arm' ? 
-    [{ fileName: webPath, fileUrl: "https://arm64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://arm64.ssss.nyc.mn/bot" }] :
-    [{ fileName: webPath, fileUrl: "https://amd64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://amd64.ssss.nyc.mn/bot" }];
+  try {
+    const architecture = getSystemArchitecture();
+    const filesToDownload = architecture === 'arm' ? 
+      [{ fileName: webPath, fileUrl: "https://arm64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://arm64.ssss.nyc.mn/bot" }] :
+      [{ fileName: webPath, fileUrl: "https://amd64.ssss.nyc.mn/web" }, { fileName: botPath, fileUrl: "https://amd64.ssss.nyc.mn/bot" }];
 
-  for (let fileInfo of filesToDownload) {
-    await new Promise((resolve, reject) => { downloadFile(fileInfo.fileName, fileInfo.fileUrl, (err) => err ? reject(err) : resolve()); });
-  }
-  fs.chmodSync(webPath, 0o775); fs.chmodSync(botPath, 0o775);
+    for (let fileInfo of filesToDownload) {
+      await new Promise((resolve, reject) => { downloadFile(fileInfo.fileName, fileInfo.fileUrl, (err) => err ? reject(err) : resolve()); });
+    }
+    fs.chmodSync(webPath, 0o775); 
+    fs.chmodSync(botPath, 0o775);
 
-  exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
-  
-  if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
-    const singleToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
-    if (singleToken) {
-      restartSingleTunnel(singleToken);
+    exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+    
+    if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
+      const singleToken = fs.readFileSync(ZT_SINGLE_TOKEN_FILE, 'utf8').trim();
+      if (singleToken) {
+        restartSingleTunnel(singleToken);
+      } else {
+        let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
+        exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+      }
     } else {
       let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
       exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
     }
-  } else {
-    let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-    exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+  } catch(e) {
+    console.error("[Download Error]:", e.message);
   }
-
-  await new Promise(r => setTimeout(r, 5000));
 }
 
 async function extractDomains() {
@@ -395,17 +410,20 @@ async function extractDomains() {
 }
 
 async function getMetaInfo() { try { const res = await axios.get('https://api.ip.sb/geoip'); return `${res.data.country_code}-${res.data.isp}`.replace(/\s+/g, '_'); } catch(e) { return 'RailwayServer'; } }
+
 async function generateLinks(argoDomain) {
-  const ISP = await getMetaInfo(); const nodeName = `${NAME}-${ISP}`;
-  const activeCfip = getActiveCfip();
-  const defaultVless = readPathsFromFile('pathvless.txt', '/vless-argo')[0];
-  const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
-  const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
-  
-  const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
-  const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
-  subContent = Buffer.from(subTxt).toString('base64');
-  fs.writeFileSync(subPath, subContent);
+  try {
+    const ISP = await getMetaInfo(); const nodeName = `${NAME}-${ISP}`;
+    const activeCfip = getActiveCfip();
+    const defaultVless = readPathsFromFile('pathvless.txt', '/vless-argo')[0];
+    const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
+    const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
+    
+    const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+    const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
+    subContent = Buffer.from(subTxt).toString('base64');
+    fs.writeFileSync(subPath, subContent);
+  } catch(e) {}
 }
 
 // ========================================================
@@ -495,10 +513,12 @@ const server = http.createServer(async (req, res) => {
 
         saveSshSettings(sshData);
 
-        exec(`pkill -9 dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W ${sshData.dropbear_buffer} -K ${sshData.dropbear_keepalive} -I ${sshData.dropbear_timeout}`);
+        try {
+            exec(`pkill -9 dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W ${sshData.dropbear_buffer} -K ${sshData.dropbear_keepalive} -I ${sshData.dropbear_timeout}`);
+        } catch(e) {}
 
         if (query.banner !== undefined) {
-            fs.writeFileSync(BANNER_FILE, query.banner);
+            try { fs.writeFileSync(BANNER_FILE, query.banner); } catch(e) {}
         }
 
         return res.end(JSON.stringify({ status: "success", message: "Pengaturan SSH & Dropbear Live Updated!" }));
@@ -1187,9 +1207,15 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
+// STARTING SERVER GATEWAY
 server.listen(PORT, () => {
     console.log(`[UI & Xray Gateway Engine] Running seamlessly on port ${PORT}`);
-    generateConfig().then(() => downloadFilesAndRun()).then(() => extractDomains()).catch(e => console.error(e));
+    
+    // MENJALANKAN ENGINE SECARA AMAN DI BACKGROUND
+    generateConfig()
+      .then(() => downloadFilesAndRun())
+      .then(() => extractDomains())
+      .catch(e => console.error("[Init Error]:", e.message));
     
     if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) {
         try {
@@ -1203,24 +1229,26 @@ server.listen(PORT, () => {
     }, 3000);
 
     setInterval(() => {
-        require('child_process').exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
-            if (!err && stdout.trim()) cachedDiskUsage = stdout.trim();
-        });
+        try {
+            require('child_process').exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
+                if (!err && stdout.trim()) cachedDiskUsage = stdout.trim();
+            });
 
-        require('child_process').exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
-            if (!err && stdout.trim()) {
-                const ipLines = stdout.trim().split('\n').filter(Boolean);
-                if (ipLines.length > 0) {
-                    cachedSshOnline = "1 User";
-                    cachedUserListDetails = `👤 IP Active: ${ipLines[0]}`;
+            require('child_process').exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
+                if (!err && stdout.trim()) {
+                    const ipLines = stdout.trim().split('\n').filter(Boolean);
+                    if (ipLines.length > 0) {
+                        cachedSshOnline = "1 User";
+                        cachedUserListDetails = `👤 IP Active: ${ipLines[0]}`;
+                    } else {
+                        cachedSshOnline = "0 User";
+                        cachedUserListDetails = "Semua user offline";
+                    }
                 } else {
                     cachedSshOnline = "0 User";
                     cachedUserListDetails = "Semua user offline";
                 }
-            } else {
-                cachedSshOnline = "0 User";
-                cachedUserListDetails = "Semua user offline";
-            }
-        });
+            });
+        } catch(e) {}
     }, 4000);
 });
