@@ -686,11 +686,11 @@ const server = http.createServer(async (req, res) => {
             pass_configured: passConfigured, 
             railway_url: rlwyUrl, 
             status: "ONLINE", 
-            dns_type: netSettings.dns_type,
-            custom_dns: netSettings.custom_dns,
-            engine_mode: netSettings.engine,
-            ws_proxy_cfg: wsProxyCfg,
-            sys_settings: sysSettings,
+            dns_type: netSettings.dns_type || "udp",
+            custom_dns: netSettings.custom_dns || "8.8.8.8",
+            engine_mode: netSettings.engine || "ws",
+            ws_proxy_cfg: wsProxyCfg || { sshPort: 22, keepAlive: 15000, maxBuffer: 32768 },
+            sys_settings: sysSettings || { banner: "", enable_bbr: "true", udpgw_port: "7300" },
             ...hwInfo, 
             ssh_online: cleanOnlineStr || "0" 
         }));
@@ -949,7 +949,7 @@ const server = http.createServer(async (req, res) => {
                 <div class="url-section"><div class="url-title">Quick Tunnel url (Vmess/Vless/Trojan Sub)</div><div class="url-box" id="quick-url">Loading...</div><button class="btn-copy" id="btn-copy-quick" onclick="copyTxt('quick-url', 'btn-copy-quick')">📋 COPY SUB DOMAIN</button></div>
 
                 <div class="card-blue">
-                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e295b; padding-bottom: 8px;">
+                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">
                     <span style="font-size: 13px; font-weight: bold; color: #fff; tracking-wider;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
                   </div>
                   <div class="grid-2">
@@ -1058,7 +1058,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -1155,10 +1155,10 @@ const server = http.createServer(async (req, res) => {
                         let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
                         let data2 = await res2.json();
 
-                        alert((data1.message || "WS Proxy Disimpan") + " | " + (data2.message || "Sistem Diperbarui"));
+                        alert("SSH Config Berhasil Disimpan!");
                         updateStats();
-                    } catch(e) {
-                        alert("Gagal memperbarui SSH Config!");
+                    } catch(e) { 
+                        alert("Gagal memperbarui SSH Config!"); 
                     }
                 }
 
@@ -1169,7 +1169,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO:");
                     if (inputToken === null) return;
 
                     try {
@@ -1187,7 +1187,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):");
                     if (inputIp === null) return;
 
                     try {
@@ -1200,7 +1200,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -1339,7 +1339,7 @@ const server = http.createServer(async (req, res) => {
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n👤 Username: " + userObj.username + "\n🔑 Password: " + userObj.password); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
@@ -1348,7 +1348,7 @@ const server = http.createServer(async (req, res) => {
                         if(data.status === "success") { msg.innerText = ""; resBox.innerText = data.message; resBox.style.display = "block"; copyBtn.style.display = "block"; document.getElementById('ssh-user').value = ""; document.getElementById('ssh-pass').value = ""; fetchAccounts(); } else { msg.style.color = "#ef4444"; msg.innerText = data.message; resBox.style.display = "none"; copyBtn.style.display = "none"; }
                     } catch(e) { msg.innerText = "Gagal memproses API"; }
                 }
-                function copyAccountText() { let txt = document.getElementById('ssh-result').innerText; navigator.clipboard.writeText(txt); let btn = document.getElementById('btn-copy-acc'); btn.innerText = "✅ STRUK AKUN BERHASIL DICOPY!"; btn.style.background = "#1f2937"; btn.style.color = "#4ade80"; setTimeout(() => { btn.innerText = "📋 COPY DETAIL AKUN"; btn.style.background = "#4ade80"; btn.style.color = "#090d16"; }, 1500); }
+                function copyAccountText() { let txt = document.getElementById('ssh-result').innerText; navigator.clipboard.writeText(txt); let btn = document.getElementById('btn-copy-acc'); btn.innerText = "✅ STRUK AKUN BERHASIL DICOPY!"; setTimeout(() => { btn.innerText = "📋 COPY DETAIL AKUN"; }, 1500); }
                 async function deleteAccount(username) {
                     if(!adminToken) { alert("Aksi Ilegal! Lu harus Login Admin dulu Bos!"); return; }
                     if(confirm("Hapus akun SSH "+username+"?")) {
@@ -1365,8 +1365,8 @@ const server = http.createServer(async (req, res) => {
                     let urlText = elem.tagName === "SELECT" ? elem.value : elem.innerText;
                     
                     if(!urlText.includes("Menunggu") && !urlText.includes("Tidak Aktif")) {
-                        navigator.clipboard.writeText(urlText); let btn = document.getElementById(btnId); let oldText = btn.innerText; btn.innerText = "✅ COPIED!"; btn.style.background = "#4ade80"; btn.style.color = "#090d16";
-                        setTimeout(() => { btn.innerText = oldText; if (elementId === 'named-url') { btn.style.background = '#a855f7'; btn.style.color = '#fff'; } else if (elementId === 'vmess-named-url') { btn.style.background = '#0284c7'; btn.style.color = '#fff'; } else if (elementId === 'railway-url') { btn.style.background = '#f43f5e'; btn.style.color = '#fff'; } else { btn.style.background = '#38bdf8'; btn.style.color = '#090d16'; } }, 1500);
+                        navigator.clipboard.writeText(urlText); let btn = document.getElementById(btnId); let oldText = btn.innerText; btn.innerText = "✅ COPIED!";
+                        setTimeout(() => { btn.innerText = oldText; }, 1500);
                     }
                 }
 
@@ -1454,7 +1454,7 @@ const server = http.createServer(async (req, res) => {
                   alert('Config Berhasil Disalin!');
                 }
 
-                setInterval(updateStats, 600000); 
+                setInterval(updateStats, 60000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
