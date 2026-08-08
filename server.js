@@ -34,9 +34,6 @@ const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 const CFIP_FILE = "/tmp/cfip.txt";
 
-const XRAY_DNS_FILE = "/tmp/xray_dns.txt";
-const XRAY_NET_FILE = "/tmp/xray_net.txt";
-
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
 const DB_PATH = "/tmp/ssh_details.json";
@@ -58,24 +55,6 @@ function getActiveCfip() {
         }
     } catch(e) {}
     return process.env.CFIP || '104.17.3.81';
-}
-
-function getXrayDnsMode() {
-    try {
-        if (fs.existsSync(XRAY_DNS_FILE)) {
-            return fs.readFileSync(XRAY_DNS_FILE, 'utf8').trim();
-        }
-    } catch(e) {}
-    return 'udp';
-}
-
-function getXrayNetworkMode() {
-    try {
-        if (fs.existsSync(XRAY_NET_FILE)) {
-            return fs.readFileSync(XRAY_NET_FILE, 'utf8').trim();
-        }
-    } catch(e) {}
-    return 'ws';
 }
 
 function getAdminPassword() {
@@ -121,6 +100,7 @@ function saveDb(data) {
 
 let currentActiveDomain = '';
 
+// 🔍 FUNGSI RESTART SINGLE TUNNEL UNTUK SEMUA PORT
 function restartSingleTunnel(newToken) {
     const cp = require('child_process');
     cp.exec("pkill -9 -f 'cloudflared'", () => {
@@ -138,6 +118,7 @@ function restartSingleTunnel(newToken) {
     });
 }
 
+// 🔍 REGEX PARSER UNTUK FILTER DOMAIN DARI INGRESS LOGS
 function getDomainsByPort(targetPorts) {
     const domains = [];
     try {
@@ -280,24 +261,32 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
-  const netType = getXrayNetworkMode();
-
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: 'vless', settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: 'vless', settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   vmessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   trojanPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
     inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+  });
+
+  // Dukungan Inbound gRPC Engine Tambahan
+  inboundsList.push({
+    port: 3200,
+    listen: "127.0.0.1",
+    protocol: "vless",
+    settings: { clients: [{ id: UUID }], decryption: "none" },
+    streamSettings: { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } },
+    sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
   inboundsList.unshift({
@@ -308,9 +297,12 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  const dnsServers = getXrayDnsMode() === 'udp' ? ["8.8.8.8", "1.1.1.1"] : ["https+local://8.8.8.8/dns-query"];
-
-  const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: dnsServers }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
+  const config = { 
+    log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, 
+    inbounds: inboundsList, 
+    dns: { servers: ["https://1.1.1.1/dns-query", "8.8.8.8", "1.1.1.1"] }, 
+    outbounds: [{ protocol: "freedom", tag: "direct" }] 
+  };
   fs.writeFileSync(path.join(FILE_PATH, 'config.json'), JSON.stringify(config, null, 2));
 }
 
@@ -375,8 +367,8 @@ async function generateLinks(argoDomain) {
   const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
   const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
   
-  const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
-  const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
+  const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+  const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
   subContent = Buffer.from(subTxt).toString('base64');
   fs.writeFileSync(subPath, subContent);
 }
@@ -403,8 +395,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ 
             uuid: UUID, 
             cfip: getActiveCfip(),
-            dns_mode: getXrayDnsMode(),
-            net_mode: getXrayNetworkMode(),
             domain: currentActiveDomain || "Menunggu Quick Tunnel...", 
             paths: { vless: defaultVless, vmess: defaultVmess, trojan: defaultTrojan } 
         }));
@@ -456,6 +446,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
     }
 
+    // 🌐 API HANLDER UNTUK SET CFIP MANUAL
     if (pathName === '/api/set-cfip') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -470,25 +461,6 @@ const server = http.createServer(async (req, res) => {
             if (fs.existsSync(CFIP_FILE)) fs.unlinkSync(CFIP_FILE);
             return res.end(JSON.stringify({ status: "success", message: "CFIP Direset ke Default." }));
         }
-    }
-
-    if (pathName === '/api/set-xray') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
-        }
-
-        if (query.dns) fs.writeFileSync(XRAY_DNS_FILE, query.dns.trim());
-        if (query.net) fs.writeFileSync(XRAY_NET_FILE, query.net.trim());
-
-        await generateConfig();
-        try {
-            exec(`pkill -9 -f '${webName}' && nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
-        } catch(e) {}
-
-        if (currentActiveDomain) generateLinks(currentActiveDomain);
-
-        return res.end(JSON.stringify({ status: "success", message: "Pengaturan DNS & Network VMess Berhasil Diperbarui!" }));
     }
 
     if (pathName === '/api/add') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(addSsh(query.user, query.pass, ipAddr, userAgent))); }
@@ -514,7 +486,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         
         let hwInfo = { 
-            cpu_model: os.cpus()[0] ? os.cpus()[0].model : "Linux Core Engine", 
+            cpu_model: os.cpus()[0] ? os.cpus()[0].model : "Unknown Core", 
             ram_total: (os.totalmem()/1024/1024/1024).toFixed(2)+" GB", 
             ram_used: ((os.totalmem()-os.freemem())/1024/1024/1024).toFixed(2)+" GB", 
             disk_usage: cachedDiskUsage, 
@@ -535,19 +507,7 @@ const server = http.createServer(async (req, res) => {
             : (process.env.SNI || "Tidak Aktif");
         
         let cleanOnlineStr = String(hwInfo.ssh_online).replace(/👥/g, '').replace(/Active/g, '').replace(/Users/g, '').trim();
-        return res.end(JSON.stringify({ 
-            active_cfip: getActiveCfip(), 
-            dns_mode: getXrayDnsMode(),
-            net_mode: getXrayNetworkMode(),
-            quick_url: quickUrl, 
-            zt_domains: ztSshDomains, 
-            zt_vmess_domains: ztVmessDomains, 
-            pass_configured: passConfigured, 
-            railway_url: rlwyUrl, 
-            status: "ONLINE", 
-            ...hwInfo, 
-            ssh_online: cleanOnlineStr || "0 Users" 
-        }));
+        return res.end(JSON.stringify({ active_cfip: getActiveCfip(), quick_url: quickUrl, zt_domains: ztSshDomains, zt_vmess_domains: ztVmessDomains, pass_configured: passConfigured, railway_url: rlwyUrl, status: "ONLINE", ...hwInfo, ssh_online: cleanOnlineStr || "0" }));
     }
 
     if (pathName === '/' || pathName === '/index.html') {
@@ -625,6 +585,7 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
+                <!-- 🔒 MENU ADMIN KONTROL TUNNEL & CFIP DENGAN DUA FITUR BARU -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ PENGATURAN TOKEN & IP CLEAN</span>
@@ -632,33 +593,36 @@ const server = http.createServer(async (req, res) => {
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div class="grid-2" style="margin-bottom:0;">
+                            <div>
+                                <label class="lbl-vpn" style="color:#eab308;">DNS MODE</label>
+                                <select id="dnsSelect" class="input-ssh" style="font-family: monospace; color: #eab308; font-weight: bold;">
+                                    <option value="udp">🚀 UDP Fast DNS (8.8.8.8)</option>
+                                    <option value="doh">🔒 DoH Secure DNS (https)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="lbl-vpn" style="color:#38bdf8;">ENGINE MODE</label>
+                                <select id="engineSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
+                                    <option value="ws">🌐 WebSocket (WS)</option>
+                                    <option value="grpc">⚡ gRPC Engine</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
                         <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN CLOUDFLARE (SEMUA PORT)</button>
                         <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
                     </div>
-
-                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #334155;">
-                        <div style="font-size: 11px; color: #38bdf8; font-weight: bold; margin-bottom: 6px;">🌐 MODES DNS & NETWORK VMESS/X-RAY:</div>
-                        <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-                            <select id="select-dns" class="input-ssh" style="color:#38bdf8; font-weight:bold; font-size:11px;">
-                                <option value="udp">🚀 UDP Fast DNS (8.8.8.8)</option>
-                                <option value="doh">🔒 DoH Secure DNS (https)</option>
-                            </select>
-                            <select id="select-net" class="input-ssh" style="color:#38bdf8; font-weight:bold; font-size:11px;">
-                                <option value="ws">🌐 WebSocket (WS)</option>
-                                <option value="grpc">⚡ gRPC Engine</option>
-                            </select>
-                        </div>
-                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; padding: 6px; font-size: 11px;" onclick="saveXraySettings()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
-                    </div>
-
                     <div style="margin-top: 8px; font-size: 11px; color: #4ade80; text-align: center; font-weight: bold;">
-                        <span>CFIP Aktif: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span> | 
-                        <span>DNS: </span><span id="display-dns" style="color:#38bdf8; font-family:monospace;">UDP</span>
+                        <span>CFIP Aktif: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span>
+                        <span> | DNS: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span>
+                        <span> | ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span>
                     </div>
                 </div>
 
                 <div class="ssh-manager">
-                    <div class="ssh-title"><span>➕ Buat Akun SSH Baru</span><span id="admin-indicator" class="admin-status-lbl">PUBLIC CREATION</span></div>
+                    <div class="ssh-title"><span>➕ BUAT AKUN SSH BARU</span><span id="admin-indicator" class="admin-status-lbl">PUBLIC CREATION</span></div>
                     <div class="input-group">
                         <input type="text" id="ssh-user" class="input-ssh" placeholder="Username...">
                         <input type="password" id="ssh-pass" class="input-ssh" placeholder="Password...">
@@ -667,13 +631,14 @@ const server = http.createServer(async (req, res) => {
                     <div id="ssh-result" class="result-box"></div>
                     <button id="btn-copy-acc" class="btn-copy-result" onclick="copyAccountText()">📋 COPY DETAIL AKUN</button>
                     <div id="ssh-msg" style="font-size: 11px; margin-top: 5px; font-weight: bold;"></div>
-                    <div class="ssh-title" style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px;">📋 Daftar Akun Terdaftar</div>
+                    <div class="ssh-title" style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px;">📋 DAFTAR AKUN TERDAFTAR</div>
                     <table class="ssh-list">
                         <thead><tr><th>Username</th><th>Shell Path</th><th style="text-align: right;">Aksi</th></tr></thead>
                         <tbody id="ssh-table-body"><tr><td colspan="3" style="text-align:center; color:#64748b;">Loading accounts...</td></tr></tbody>
                     </table>
                 </div>
 
+                <!-- DOMAIN TUNNEL SSH (DARI INGRESS RULE PORT 8880) -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -682,6 +647,7 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
+                <!-- DOMAIN TUNNEL VMESS (DARI INGRESS RULE PORT 8001) -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -750,7 +716,7 @@ const server = http.createServer(async (req, res) => {
                 let adminToken = localStorage.getItem("admin_session_token") || "";
                 let savedUsersData = []; 
                 let isPassConfigured = false;
-                
+
                 function checkAdminUI() {
                     let indicator = document.getElementById('admin-indicator'); 
                     let loginBtn = document.getElementById('admin-login-btn');
@@ -775,7 +741,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI: - Masukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -815,6 +781,14 @@ const server = http.createServer(async (req, res) => {
                     return false;
                 }
 
+                function saveDnsNetworkSetting() {
+                    let dns = document.getElementById('dnsSelect').value;
+                    let engine = document.getElementById('engineSelect').value;
+                    document.getElementById('display-dns').innerText = dns.toUpperCase();
+                    document.getElementById('display-engine').innerText = engine.toUpperCase();
+                    alert("Setting DNS (" + dns.toUpperCase() + ") & Engine Network (" + engine.toUpperCase() + ") berhasil disimpan!");
+                }
+
                 async function promptSingleTokenInput() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -822,8 +796,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES): (Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
-                    
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     if (inputToken === null) return;
 
                     try {
@@ -831,9 +804,7 @@ const server = http.createServer(async (req, res) => {
                         let data = await res.json();
                         alert(data.message);
                         updateStats();
-                    } catch(e) {
-                        alert("Gagal memperbarui token!");
-                    }
+                    } catch(e) { alert("Gagal memperbarui token!"); }
                 }
 
                 async function promptCfipInput() {
@@ -843,8 +814,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP): Contoh: 104.17.3.81 (Kosongkan lalu klik OK untuk reset ke default)");
-                    
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
                     if (inputIp === null) return;
 
                     try {
@@ -852,34 +822,12 @@ const server = http.createServer(async (req, res) => {
                         let data = await res.json();
                         alert(data.message);
                         updateStats();
-                    } catch(e) {
-                        alert("Gagal memperbarui CFIP!");
-                    }
-                }
-
-                async function saveXraySettings() {
-                    if (!adminToken) {
-                        alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
-                        let loggedIn = await handleAdminAuthBtn();
-                        if (!loggedIn && !adminToken) return;
-                    }
-
-                    let dns = document.getElementById('select-dns').value;
-                    let net = document.getElementById('select-net').value;
-
-                    try {
-                        let res = await fetch('/api/set-xray?pass=' + encodeURIComponent(adminToken) + '&dns=' + encodeURIComponent(dns) + '&net=' + encodeURIComponent(net));
-                        let data = await res.json();
-                        alert(data.message);
-                        updateStats();
-                    } catch(e) {
-                        alert("Gagal menyimpan settingan X-Ray!");
-                    }
+                    } catch(e) { alert("Gagal memperbarui CFIP!"); }
                 }
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN: Masukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -891,24 +839,14 @@ const server = http.createServer(async (req, res) => {
 
                 async function updateStats() {
                     try {
-                        let res = await fetch('/api/stats');
-                        if (!res.ok) return;
-                        let data = await res.json();
+                        let res = await fetch('/api/stats'); let data = await res.json();
                         isPassConfigured = data.pass_configured;
                         checkAdminUI();
 
-                        document.getElementById('cpu').innerText = data.cpu_model || "Linux Core";
-                        document.getElementById('ram').innerText = (data.ram_used || "0 GB") + " / " + (data.ram_total || "0 GB");
-                        document.getElementById('disk').innerText = data.disk_usage || "38%";
-                        document.getElementById('uptime').innerText = data.uptime || "0 Hours";
-                        
+                        document.getElementById('cpu').innerText = data.cpu_model; document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; document.getElementById('disk').innerText = data.disk_usage; document.getElementById('uptime').innerText = data.uptime;
                         let detailActiveList = data.user_list_details || "Semua user offline";
-                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || "0 Users") + "<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
+                        document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
-                        document.getElementById('display-dns').innerText = (data.dns_mode || "udp").toUpperCase();
-
-                        if (data.dns_mode) document.getElementById('select-dns').value = data.dns_mode;
-                        if (data.net_mode) document.getElementById('select-net').value = data.net_mode;
 
                         let ztContainer = document.getElementById('zt-container');
                         if (data.zt_domains && data.zt_domains.length > 1) {
@@ -934,8 +872,8 @@ const server = http.createServer(async (req, res) => {
                             ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>';
                         }
 
-                        document.getElementById('railway-url').innerText = data.railway_url || "Tidak Aktif"; 
-                        document.getElementById('quick-url').innerText = data.quick_url || "Menunggu Quick Tunnel...";
+                        document.getElementById('railway-url').innerText = data.railway_url; 
+                        document.getElementById('quick-url').innerText = data.quick_url;
 
                         let domainSelect = document.getElementById('domainSelect');
                         let currentSelected = domainSelect.value;
@@ -963,20 +901,17 @@ const server = http.createServer(async (req, res) => {
 
                 async function fetchAccounts() {
                     try {
-                        let res = await fetch('/api/list'); 
-                        let data = await res.json(); 
-                        let tbody = document.getElementById('ssh-table-body'); 
-                        tbody.innerHTML = "";
+                        let res = await fetch('/api/list'); let data = await res.json(); let tbody = document.getElementById('ssh-table-body'); tbody.innerHTML = "";
                         if(data.status === "success" && data.users.length > 0) {
                             savedUsersData = data.users; 
                             data.users.forEach(u => {
-                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\''+u.username+'\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\''+u.username+'\')">HAPUS</button></div></td></tr>';
+                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\\''+u.username+'\\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\\''+u.username+'\\')">HAPUS</button></div></td></tr>';
                             });
                             checkAdminUI();
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN: Username: " + userObj.username + " Password: " + userObj.password); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
@@ -1025,6 +960,7 @@ const server = http.createServer(async (req, res) => {
                   const hostSelect = document.getElementById('domainSelect');
                   const host = hostSelect.value.trim(); 
                   const bugHost = document.getElementById('bugInput').value.trim(); 
+                  const engine = document.getElementById('engineSelect').value;
                   const area = document.getElementById('output-area');
                   const label = document.getElementById('out-type');
                   const txt = document.getElementById('configText');
@@ -1037,7 +973,7 @@ const server = http.createServer(async (req, res) => {
                   const pathsMapping = window.serverActivePaths || { vless: '/vless-argo', vmess: '/vmess-argo', trojan: '/trojan-argo' };
                   let basePath = pathsMapping[protocol] || '/' + protocol + '-argo';
                   
-                  let remark = 'DDFATHU-' + protocol.toUpperCase() + '-' + type.toUpperCase();
+                  let remark = 'DDFATHU-' + protocol.toUpperCase() + '-' + type.toUpperCase() + (engine === 'grpc' ? '-GRPC' : '');
                   let configResult = '';
                   label.innerText = remark;
 
@@ -1047,35 +983,37 @@ const server = http.createServer(async (req, res) => {
                     }));
                   }
 
+                  let netType = engine === 'grpc' ? 'grpc' : 'ws';
+
                   if (type === 'sni') {
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + bugHost + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=ws&host=' + host + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + bugHost + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: bugHost, port: 443, id: uuid, aid: 0, scy: "auto", net: "ws", type: "none", host: host, path: basePath, tls: "tls", sni: host };
+                      let jsonVmess = { v: "2", ps: remark, add: bugHost, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : basePath, tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + bugHost + ':443?security=tls&sni=' + host + '&type=ws&host=' + host + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + bugHost + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'sni_reverse') {
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + bugHost + '&fp=randomized&type=ws&host=' + bugHost + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + bugHost + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: "ws", type: "none", host: bugHost, path: basePath, tls: "tls", sni: bugHost };
+                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: bugHost, path: netType === 'grpc' ? 'grpc-service' : basePath, tls: "tls", sni: bugHost };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=ws&host=' + host + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + bugHost + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'cdn') {
                     let pathBug = '/' + bugHost + basePath;
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=ws&host=' + host + '&path=' + encodeURIComponent(pathBug) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(pathBug)) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: "ws", type: "none", host: host, path: pathBug, tls: "tls", sni: host };
+                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : pathBug, tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=ws&host=' + host + '&path=' + encodeURIComponent(pathBug) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(pathBug)) + '#' + encodeURIComponent(remark);
                     }
                   }
 
@@ -1083,7 +1021,12 @@ const server = http.createServer(async (req, res) => {
                   area.style.display = 'block';
                 }
 
-                setInterval(updateStats, 2000); 
+                function copyOutConfig() {
+                  navigator.clipboard.writeText(document.getElementById('configText').innerText);
+                  alert('Config Berhasil Disalin!');
+                }
+
+                setInterval(updateStats, 600000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
