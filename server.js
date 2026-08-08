@@ -607,7 +607,7 @@ const server = http.createServer(async (req, res) => {
             }, 1000);
         });
 
-        // 3. Kill badvpn-udpgw lama & restart ke port baru secara real-time
+        // 3. KILL BADVPN UDPGW LAMA & RESTART KE PORT BARU
         exec("pkill -9 badvpn-udpgw", () => {
             setTimeout(() => {
                 if (fs.existsSync('/usr/local/bin/badvpn-udpgw')) {
@@ -1083,7 +1083,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -1173,14 +1173,14 @@ const server = http.createServer(async (req, res) => {
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
-                    fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
-                    fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
-
-                    alert("Konfigurasi SSH Server Berhasil Disimpan!");
-                    
-                    setTimeout(() => {
-                        updateStats();
-                    }, 2000);
+                    try {
+                        await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
+                        await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
+                        alert("Setting SSH & System Config Berhasil Disimpan!");
+                    } catch(e) {
+                        alert("Konfigurasi dikirim ke server!");
+                    }
+                    setTimeout(() => { updateStats(); }, 2000);
                 }
 
                 async function promptSingleTokenInput() {
@@ -1190,7 +1190,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     if (inputToken === null) return;
 
                     try {
@@ -1208,7 +1208,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\nContoh: 104.17.3.81\n\n(Kosongkan lalu klik OK untuk reset ke default)");
                     if (inputIp === null) return;
 
                     try {
@@ -1221,7 +1221,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -1351,13 +1351,13 @@ const server = http.createServer(async (req, res) => {
                         if(data.status === "success" && data.users.length > 0) {
                             savedUsersData = data.users; 
                             data.users.forEach(u => {
-                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\\''+u.username+'\\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\\''+u.username+'\\')">HAPUS</button></div></td></tr>';
+                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\''+u.username+'\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\''+u.username+'\')">HAPUS</button></div></td></tr>';
                             });
                             checkAdminUI();
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
