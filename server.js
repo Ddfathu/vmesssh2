@@ -47,19 +47,19 @@ if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH);
 }
 
-// FUNGSI LOAD & SAVE SETTINGAN NETWORK/DNS
+// FUNGSI LOAD & SAVE SETTINGAN NETWORK/DNS CUSTOM
 function getNetworkSettings() {
     try {
         if (fs.existsSync(NET_SETTING_FILE)) {
             return JSON.parse(fs.readFileSync(NET_SETTING_FILE, 'utf8'));
         }
     } catch(e) {}
-    return { dns: "udp", engine: "ws" };
+    return { dns_type: "udp", custom_dns: "8.8.8.8", engine: "ws" };
 }
 
-function saveNetworkSettings(dns, engine) {
+function saveNetworkSettings(dns_type, custom_dns, engine) {
     try {
-        fs.writeFileSync(NET_SETTING_FILE, JSON.stringify({ dns, engine }, null, 2));
+        fs.writeFileSync(NET_SETTING_FILE, JSON.stringify({ dns_type, custom_dns, engine }, null, 2));
     } catch(e) {}
 }
 
@@ -266,7 +266,7 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
-// 🔧 HASIL FIX: DYNAMIC CONFIG GENERATION DENGAN REAL BACKEND DOH & GRPC
+// 🔧 BACKEND DYNAMIC CONFIG ENGINE (WS, gRPC, HTTP/2, TCP) + CUSTOM DNS
 async function generateConfig() {
   const netSettings = getNetworkSettings();
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
@@ -277,17 +277,29 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
-  const isGrpc = netSettings.engine === 'grpc';
+  const engine = netSettings.engine || 'ws';
+
+  let streamSettingsObj = {};
+  if (engine === 'grpc') {
+    streamSettingsObj = { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } };
+  } else if (engine === 'h2') {
+    streamSettingsObj = { network: "h2", security: "none", httpSettings: { path: "/h2-path", host: ["localhost"] } };
+  } else if (engine === 'tcp') {
+    streamSettingsObj = { network: "tcp", security: "none" };
+  } else {
+    streamSettingsObj = { network: "ws", security: "none" };
+  }
 
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
+    let st = JSON.parse(JSON.stringify(streamSettingsObj));
+    if (engine === 'ws') st.wsSettings = { path: p };
+
     inboundsList.push({ 
         port: cp, listen: "127.0.0.1", protocol: 'vless', 
         settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, 
-        streamSettings: isGrpc ? 
-            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
-            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        streamSettings: st, 
         sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
     }); 
   });
@@ -295,12 +307,13 @@ async function generateConfig() {
   vmessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
+    let st = JSON.parse(JSON.stringify(streamSettingsObj));
+    if (engine === 'ws') st.wsSettings = { path: p };
+
     inboundsList.push({ 
         port: cp, listen: "127.0.0.1", protocol: "vmess", 
         settings: { clients: [{ id: UUID, alterId: 0 }] }, 
-        streamSettings: isGrpc ? 
-            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
-            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        streamSettings: st, 
         sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
     }); 
   });
@@ -308,12 +321,13 @@ async function generateConfig() {
   trojanPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
+    let st = JSON.parse(JSON.stringify(streamSettingsObj));
+    if (engine === 'ws') st.wsSettings = { path: p };
+
     inboundsList.push({ 
         port: cp, listen: "127.0.0.1", protocol: "trojan", 
         settings: { clients: [{ password: UUID }] }, 
-        streamSettings: isGrpc ? 
-            { network: "grpc", security: "none", grpcSettings: { serviceName: "grpc-service" } } : 
-            { network: "ws", security: "none", wsSettings: { path: p } }, 
+        streamSettings: st, 
         sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } 
     }); 
   });
@@ -326,10 +340,17 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  // REAL DNS INJECTION BACKEND
-  const dnsServers = netSettings.dns === 'doh' ? 
-    ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"] : 
-    ["8.8.8.8", "1.1.1.1"];
+  // REAL CUSTOM DNS INJECTION
+  let dnsValue = (netSettings.custom_dns || "").trim();
+  let dnsServers = [];
+
+  if (netSettings.dns_type === 'doh') {
+    if (!dnsValue.startsWith('http')) dnsValue = 'https://1.1.1.1/dns-query';
+    dnsServers = [dnsValue, "8.8.8.8"];
+  } else {
+    if (!dnsValue || dnsValue.startsWith('http')) dnsValue = '8.8.8.8';
+    dnsServers = [dnsValue, "1.1.1.1"];
+  }
 
   const config = { 
     log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, 
@@ -469,26 +490,26 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
-    // 🔑 HASIL FIX: ENDPOINT SET NETWORK SEKARANG KETAT PAKAI VALIDASI ADMIN PASS & SYSTEM RESTART
+    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS (VERIFIKASI ADMIN)
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
             return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
-        const dns = query.dns || "udp";
+        const dns_type = query.dns_type || "udp";
+        const custom_dns = query.custom_dns || "8.8.8.8";
         const engine = query.engine || "ws";
         
-        saveNetworkSettings(dns, engine);
+        saveNetworkSettings(dns_type, custom_dns, engine);
         await generateConfig();
         
-        // Restart Core Engine Biar Reload Config JSON Terbaru
         exec(`pkill -9 -f '${webName}'`, () => {
             setTimeout(() => {
                 exec(`nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
             }, 1000);
         });
 
-        return res.end(JSON.stringify({ status: "success", message: `Konfigurasi berhasil disimpan! DNS: ${dns.toUpperCase()}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
+        return res.end(JSON.stringify({ status: "success", message: `Setting Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -572,7 +593,8 @@ const server = http.createServer(async (req, res) => {
             pass_configured: passConfigured, 
             railway_url: rlwyUrl, 
             status: "ONLINE", 
-            dns_mode: netSettings.dns,
+            dns_type: netSettings.dns_type,
+            custom_dns: netSettings.custom_dns,
             engine_mode: netSettings.engine,
             ...hwInfo, 
             ssh_online: cleanOnlineStr || "0" 
@@ -654,10 +676,10 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN KONTROL TUNNEL & CFIP -->
+                <!-- 🔒 MENU ADMIN KONTROL TUNNEL, CUSTOM DNS & ENGINE -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>⚙️ PENGATURAN TOKEN & IP CLEAN</span>
+                        <span>⚙️ PENGATURAN TOKEN, DNS & ENGINE</span>
                         <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; text-decoration: underline; font-size: 11px; display: none;">🔑 GANTI PASS ADMIN</span>
                     </div>
 
@@ -665,9 +687,9 @@ const server = http.createServer(async (req, res) => {
                         <div class="grid-2" style="margin-bottom:0;">
                             <div>
                                 <label class="lbl-vpn" style="color:#eab308;">DNS MODE</label>
-                                <select id="dnsSelect" class="input-ssh" style="font-family: monospace; color: #eab308; font-weight: bold;">
-                                    <option value="udp">🚀 UDP Fast DNS (8.8.8.8)</option>
-                                    <option value="doh">🔒 DoH Secure DNS (https)</option>
+                                <select id="dnsTypeSelect" class="input-ssh" style="font-family: monospace; color: #eab308; font-weight: bold;" onchange="toggleDnsPlaceholder()">
+                                    <option value="udp">🚀 UDP Fast DNS (IP)</option>
+                                    <option value="doh">🔒 DoH Secure DNS (HTTPS URL)</option>
                                 </select>
                             </div>
                             <div>
@@ -675,8 +697,15 @@ const server = http.createServer(async (req, res) => {
                                 <select id="engineSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
                                     <option value="ws">🌐 WebSocket (WS)</option>
                                     <option value="grpc">⚡ gRPC Engine</option>
+                                    <option value="h2">🚀 HTTP/2 (H2)</option>
+                                    <option value="tcp">🔌 TCP (Raw Direct)</option>
                                 </select>
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="lbl-vpn" style="color:#4ade80;">CUSTOM DNS IP / DOH URL</label>
+                            <input type="text" id="customDnsInput" class="input-ssh" placeholder="IP DNS (contoh: 8.8.8.8) atau URL DoH" style="font-family: monospace; color:#4ade80;">
                         </div>
 
                         <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
@@ -684,7 +713,7 @@ const server = http.createServer(async (req, res) => {
                         <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
                     </div>
                     <div style="margin-top: 8px; font-size: 11px; color: #4ade80; text-align: center; font-weight: bold;">
-                        <span>CFIP Aktif: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span>
+                        <span>CFIP: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span>
                         <span> | DNS: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span>
                         <span> | ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span>
                     </div>
@@ -763,7 +792,7 @@ const server = http.createServer(async (req, res) => {
                     <button onclick="buildConfig('trojan', 'sni_reverse', event)" class="btn-blue" style="color:#fde047;">TROJAN REV</button>
                   </div>
 
-                  <div class="border-lbl" style="border-color:#6366f1; color:#c7d2fe;">BUG CDN (WEBSOCKET PROXY)</div>
+                  <div class="border-lbl" style="border-color:#6366f1; color:#c7d2fe;">BUG CDN (PROXY PROT)</div>
                   <div class="grid-3">
                     <button onclick="buildConfig('vless', 'cdn', event)" class="btn-blue">VLESS</button>
                     <button onclick="buildConfig('vmess', 'cdn', event)" class="btn-blue">VMESS</button>
@@ -805,6 +834,16 @@ const server = http.createServer(async (req, res) => {
                         loginBtn.innerText = "🔑 LOGIN ADMIN"; loginBtn.style.background = "#334155"; loginBtn.style.color = "#f8fafc";
                         changePassBtn.style.display = "none";
                         document.querySelectorAll('.btn-del').forEach(b => b.style.display = "none"); document.querySelectorAll('.btn-info').forEach(b => b.style.display = "none");
+                    }
+                }
+
+                function toggleDnsPlaceholder() {
+                    let dnsType = document.getElementById('dnsTypeSelect').value;
+                    let dnsInput = document.getElementById('customDnsInput');
+                    if(dnsType === 'doh') {
+                        dnsInput.placeholder = "URL DoH (contoh: https://1.1.1.1/dns-query)";
+                    } else {
+                        dnsInput.placeholder = "IP DNS (contoh: 8.8.8.8)";
                     }
                 }
 
@@ -850,7 +889,6 @@ const server = http.createServer(async (req, res) => {
                     return false;
                 }
 
-                // 🔑 FIX JALUR SIMPAN NETWORK DENGAN CEK ADMIN
                 async function saveDnsNetworkSetting() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -858,11 +896,12 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let dns = document.getElementById('dnsSelect').value;
+                    let dnsType = document.getElementById('dnsTypeSelect').value;
+                    let customDns = document.getElementById('customDnsInput').value.trim();
                     let engine = document.getElementById('engineSelect').value;
 
                     try {
-                        let res = await fetch('/api/set-network?pass=' + encodeURIComponent(adminToken) + '&dns=' + dns + '&engine=' + engine);
+                        let res = await fetch('/api/set-network?pass=' + encodeURIComponent(adminToken) + '&dns_type=' + dnsType + '&custom_dns=' + encodeURIComponent(customDns) + '&engine=' + engine);
                         let data = await res.json();
                         alert(data.message);
                         if (data.status === "success") {
@@ -932,9 +971,12 @@ const server = http.createServer(async (req, res) => {
                         document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
 
-                        if(data.dns_mode) {
-                            document.getElementById('dnsSelect').value = data.dns_mode;
-                            document.getElementById('display-dns').innerText = data.dns_mode.toUpperCase();
+                        if(data.dns_type) {
+                            document.getElementById('dnsTypeSelect').value = data.dns_type;
+                            document.getElementById('display-dns').innerText = (data.dns_type + " (" + (data.custom_dns || "8.8.8.8") + ")").toUpperCase();
+                        }
+                        if(data.custom_dns) {
+                            document.getElementById('customDnsInput').value = data.custom_dns;
                         }
                         if(data.engine_mode) {
                             document.getElementById('engineSelect').value = data.engine_mode;
@@ -1045,6 +1087,7 @@ const server = http.createServer(async (req, res) => {
                   } catch (e) {}
                 }
 
+                // GENERATOR LINK AUTO-ADAPT TRANSPORT TYPE
                 function buildConfig(protocol, type, evt) {
                   document.querySelectorAll('.btn-blue').forEach(b => b.classList.remove('btn-active'));
                   if(evt && evt.target) evt.target.classList.add('btn-active');
@@ -1066,7 +1109,7 @@ const server = http.createServer(async (req, res) => {
                   const pathsMapping = window.serverActivePaths || { vless: '/vless-argo', vmess: '/vmess-argo', trojan: '/trojan-argo' };
                   let basePath = pathsMapping[protocol] || '/' + protocol + '-argo';
                   
-                  let remark = 'DDFATHU-' + protocol.toUpperCase() + '-' + type.toUpperCase() + (engine === 'grpc' ? '-GRPC' : '');
+                  let remark = 'DDFATHU-' + protocol.toUpperCase() + '-' + type.toUpperCase() + '-' + engine.toUpperCase();
                   let configResult = '';
                   label.innerText = remark;
 
@@ -1076,37 +1119,37 @@ const server = http.createServer(async (req, res) => {
                     }));
                   }
 
-                  let netType = engine === 'grpc' ? 'grpc' : 'ws';
+                  let netType = engine;
 
                   if (type === 'sni') {
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + bugHost + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + bugHost + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(basePath))) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: bugHost, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : basePath, tls: "tls", sni: host };
+                      let jsonVmess = { v: "2", ps: remark, add: bugHost, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : (netType === 'h2' ? '/h2-path' : basePath), tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + bugHost + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + bugHost + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(basePath))) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'sni_reverse') {
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + bugHost + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + bugHost + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath))) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: bugHost, path: netType === 'grpc' ? 'grpc-service' : basePath, tls: "tls", sni: bugHost };
+                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: bugHost, path: netType === 'grpc' ? 'grpc-service' : (netType === 'h2' ? '/h2-path' : basePath), tls: "tls", sni: bugHost };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + bugHost + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath)) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + bugHost + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + bugHost + '&path=' + encodeURIComponent(basePath))) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'cdn') {
                     let pathBug = '/' + bugHost + basePath;
                     if (protocol === 'vless') {
-                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(pathBug)) + '#' + encodeURIComponent(remark);
+                      configResult = 'vless://' + uuid + '@' + host + ':443?encryption=none&security=tls&sni=' + host + '&fp=randomized&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(pathBug))) + '#' + encodeURIComponent(remark);
                     } else if (protocol === 'vmess') {
-                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : pathBug, tls: "tls", sni: host };
+                      let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : (netType === 'h2' ? '/h2-path' : pathBug), tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : '&host=' + host + '&path=' + encodeURIComponent(pathBug)) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(pathBug))) + '#' + encodeURIComponent(remark);
                     }
                   }
 
