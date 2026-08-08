@@ -739,7 +739,16 @@ const server = http.createServer(async (req, res) => {
 
                         <div>
                             <label class="lbl-vpn" style="color:#4ade80;">CUSTOM DNS IP / DOH URL</label>
-                            <input type="text" id="customDnsInput" class="input-ssh" placeholder="IP DNS (contoh: 8.8.8.8) atau URL DoH" style="font-family: monospace; color:#4ade80;">
+                            <select id="dnsDropdown" class="input-ssh" style="font-family: monospace; color:#4ade80;" onchange="toggleCustomDnsInput()">
+                                <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
+                                <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
+                                <option value="9.9.9.9">Quad9 DNS (9.9.9.9)</option>
+                                <option value="https://1.1.1.1/dns-query">Cloudflare DoH (https://1.1.1.1/dns-query)</option>
+                                <option value="https://dns.google/dns-query">Google DoH (https://dns.google/dns-query)</option>
+                                <option value="https://dns.adguard-dns.com/dns-query">AdGuard DoH (https://dns.adguard-dns.com/dns-query)</option>
+                                <option value="custom">✏️ Custom...</option>
+                            </select>
+                            <input type="text" id="customDnsInput" class="input-ssh" placeholder="Ketik IP DNS atau URL DoH Manual..." style="font-family: monospace; color:#4ade80; display:none; margin-top:4px;">
                         </div>
 
                         <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 2px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
@@ -748,15 +757,34 @@ const server = http.createServer(async (req, res) => {
                         <div class="grid-3" style="margin-top:4px;">
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">PORT DROPBEAR</label>
-                                <input type="number" id="wsPortInput" class="input-ssh" placeholder="22">
+                                <select id="wsPortDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsPortInput()">
+                                    <option value="22">Port 22 (SSH OpenSSH)</option>
+                                    <option value="109">Port 109 (Dropbear Direct)</option>
+                                    <option value="143">Port 143 (Dropbear Alt)</option>
+                                    <option value="447">Port 447 (SSL Stunnel)</option>
+                                    <option value="custom">✏️ Custom...</option>
+                                </select>
+                                <input type="number" id="wsPortInput" class="input-ssh" placeholder="Port Manual..." style="display:none; margin-top:4px;">
                             </div>
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">KEEPALIVE (MS)</label>
-                                <input type="number" id="wsKeepInput" class="input-ssh" placeholder="15000">
+                                <select id="wsKeepDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsKeepInput()">
+                                    <option value="5000">5000 (5 Detik - Fast)</option>
+                                    <option value="15000">15000 (15 Detik - Standard)</option>
+                                    <option value="30000">30000 (30 Detik - Relaxed)</option>
+                                    <option value="custom">✏️ Custom...</option>
+                                </select>
+                                <input type="number" id="wsKeepInput" class="input-ssh" placeholder="Interval MS..." style="display:none; margin-top:4px;">
                             </div>
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">MAX BUFFER</label>
-                                <input type="number" id="wsBufInput" class="input-ssh" placeholder="32768">
+                                <select id="wsBufDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsBufInput()">
+                                    <option value="16384">16384 (16KB - Tight)</option>
+                                    <option value="32768">32768 (32KB - Normal)</option>
+                                    <option value="65536">65536 (64KB - Large)</option>
+                                    <option value="custom">✏️ Custom...</option>
+                                </select>
+                                <input type="number" id="wsBufInput" class="input-ssh" placeholder="Bytes Limit..." style="display:none; margin-top:4px;">
                             </div>
                         </div>
                         <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG WS-PROXY SSH</button>
@@ -894,13 +922,31 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 function toggleDnsPlaceholder() {
-                    let dnsType = document.getElementById('dnsTypeSelect').value;
-                    let dnsInput = document.getElementById('customDnsInput');
-                    if(dnsType === 'doh') {
-                        dnsInput.placeholder = "URL DoH (contoh: https://1.1.1.1/dns-query)";
-                    } else {
-                        dnsInput.placeholder = "IP DNS (contoh: 8.8.8.8)";
-                    }
+                    toggleCustomDnsInput();
+                }
+
+                function toggleCustomDnsInput() {
+                    let sel = document.getElementById('dnsDropdown').value;
+                    let inp = document.getElementById('customDnsInput');
+                    inp.style.display = (sel === 'custom') ? 'block' : 'none';
+                }
+
+                function toggleCustomWsPortInput() {
+                    let sel = document.getElementById('wsPortDropdown').value;
+                    let inp = document.getElementById('wsPortInput');
+                    inp.style.display = (sel === 'custom') ? 'block' : 'none';
+                }
+
+                function toggleCustomWsKeepInput() {
+                    let sel = document.getElementById('wsKeepDropdown').value;
+                    let inp = document.getElementById('wsKeepInput');
+                    inp.style.display = (sel === 'custom') ? 'block' : 'none';
+                }
+
+                function toggleCustomWsBufInput() {
+                    let sel = document.getElementById('wsBufDropdown').value;
+                    let inp = document.getElementById('wsBufInput');
+                    inp.style.display = (sel === 'custom') ? 'block' : 'none';
                 }
 
                 async function handleAdminAuthBtn() {
@@ -953,7 +999,8 @@ const server = http.createServer(async (req, res) => {
                     }
 
                     let dnsType = document.getElementById('dnsTypeSelect').value;
-                    let customDns = document.getElementById('customDnsInput').value.trim();
+                    let selDns = document.getElementById('dnsDropdown').value;
+                    let customDns = (selDns === 'custom') ? document.getElementById('customDnsInput').value.trim() : selDns;
                     let engine = document.getElementById('engineSelect').value;
 
                     try {
@@ -975,9 +1022,14 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let port = document.getElementById('wsPortInput').value;
-                    let keep = document.getElementById('wsKeepInput').value;
-                    let buf = document.getElementById('wsBufInput').value;
+                    let selPort = document.getElementById('wsPortDropdown').value;
+                    let port = (selPort === 'custom') ? document.getElementById('wsPortInput').value : selPort;
+
+                    let selKeep = document.getElementById('wsKeepDropdown').value;
+                    let keep = (selKeep === 'custom') ? document.getElementById('wsKeepInput').value : selKeep;
+
+                    let selBuf = document.getElementById('wsBufDropdown').value;
+                    let buf = (selBuf === 'custom') ? document.getElementById('wsBufInput').value : selBuf;
 
                     try {
                         let res = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
@@ -1053,16 +1105,36 @@ const server = http.createServer(async (req, res) => {
                             document.getElementById('display-dns').innerText = (data.dns_type + " (" + (data.custom_dns || "8.8.8.8") + ")").toUpperCase();
                         }
                         if(data.custom_dns) {
-                            document.getElementById('customDnsInput').value = data.custom_dns;
+                            let dropdown = document.getElementById('dnsDropdown');
+                            let found = Array.from(dropdown.options).some(opt => opt.value === data.custom_dns);
+                            if (found) {
+                                dropdown.value = data.custom_dns;
+                            } else {
+                                dropdown.value = 'custom';
+                                document.getElementById('customDnsInput').value = data.custom_dns;
+                            }
+                            toggleCustomDnsInput();
                         }
                         if(data.engine_mode) {
                             document.getElementById('engineSelect').value = data.engine_mode;
                             document.getElementById('display-engine').innerText = data.engine_mode.toUpperCase();
                         }
                         if(data.ws_proxy_cfg) {
-                            document.getElementById('wsPortInput').value = data.ws_proxy_cfg.sshPort;
-                            document.getElementById('wsKeepInput').value = data.ws_proxy_cfg.keepAlive;
-                            document.getElementById('wsBufInput').value = data.ws_proxy_cfg.maxBuffer;
+                            let pDrop = document.getElementById('wsPortDropdown');
+                            let foundP = Array.from(pDrop.options).some(opt => opt.value == data.ws_proxy_cfg.sshPort);
+                            if (foundP) { pDrop.value = data.ws_proxy_cfg.sshPort; } else { pDrop.value = 'custom'; document.getElementById('wsPortInput').value = data.ws_proxy_cfg.sshPort; }
+                            toggleCustomWsPortInput();
+
+                            let kDrop = document.getElementById('wsKeepDropdown');
+                            let foundK = Array.from(kDrop.options).some(opt => opt.value == data.ws_proxy_cfg.keepAlive);
+                            if (foundK) { kDrop.value = data.ws_proxy_cfg.keepAlive; } else { kDrop.value = 'custom'; document.getElementById('wsKeepInput').value = data.ws_proxy_cfg.keepAlive; }
+                            toggleCustomWsKeepInput();
+
+                            let bDrop = document.getElementById('wsBufDropdown');
+                            let foundB = Array.from(bDrop.options).some(opt => opt.value == data.ws_proxy_cfg.maxBuffer);
+                            if (foundB) { bDrop.value = data.ws_proxy_cfg.maxBuffer; } else { bDrop.value = 'custom'; document.getElementById('wsBufInput').value = data.ws_proxy_cfg.maxBuffer; }
+                            toggleCustomWsBufInput();
+
                             document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
                         }
 
