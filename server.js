@@ -806,14 +806,16 @@ const server = http.createServer(async (req, res) => {
                         <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
                     </div>
 
-                    <!-- BOX 3: INFO STATUS -->
+                    <!-- BOX 3: INFO STATUS DIBAWAH -->
                     <div class="sub-box" style="border-color: #10b981; margin-bottom: 0;">
                         <div class="sub-box-title" style="color:#10b981; text-align:center; display:block;">📋 PENGATURAN YANG TERPASANG DI SERVER</div>
                         <div style="font-size: 11px; color: #4ade80; text-align: center; font-weight: bold; line-height: 1.6;">
                             <span>CFIP AKTIF: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span><br>
                             <span>DNS MODE: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span> | 
                             <span>ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
-                            <span>SSH TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span>
+                            <span>SSH TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span> | 
+                            <span>KEEPALIVE: </span><span id="display-ws-keep" style="color:#38bdf8; font-family:monospace;">15000ms</span> | 
+                            <span>MAX BUFFER: </span><span id="display-ws-buf" style="color:#eab308; font-family:monospace;">32768 Bytes</span>
                         </div>
                     </div>
                 </div>
@@ -828,7 +830,7 @@ const server = http.createServer(async (req, res) => {
                     <div id="ssh-result" class="result-box"></div>
                     <button id="btn-copy-acc" class="btn-copy-result" onclick="copyAccountText()">📋 COPY DETAIL AKUN</button>
                     <div id="ssh-msg" style="font-size: 11px; margin-top: 5px; font-weight: bold;"></div>
-                    <div class="ssh-title" style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px;">📋 DAFTAR AKUN TERDAFTAR</div>
+                    <div class="ssh-title" style="margin-top: 15px; border-top: 1px solid #1f2937; padding-top: 10px;">📋 DAFTAR AKUN TERDAFTAR</div>
                     <table class="ssh-list">
                         <thead><tr><th>Username</th><th>Shell Path</th><th style="text-align: right;">Aksi</th></tr></thead>
                         <tbody id="ssh-table-body"><tr><td colspan="3" style="text-align:center; color:#64748b;">Loading accounts...</td></tr></tbody>
@@ -857,7 +859,7 @@ const server = http.createServer(async (req, res) => {
                 <div class="url-section"><div class="url-title">Quick Tunnel url (Vmess/Vless/Trojan Sub)</div><div class="url-box" id="quick-url">Loading...</div><button class="btn-copy" id="btn-copy-quick" onclick="copyTxt('quick-url', 'btn-copy-quick')">📋 COPY SUB DOMAIN</button></div>
 
                 <div class="card-blue">
-                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e295b; padding-bottom: 8px;">
+                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e2d54; padding-bottom: 8px;">
                     <span style="font-size: 13px; font-weight: bold; color: #fff; tracking-wider;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
                   </div>
                   <div class="grid-2">
@@ -1157,6 +1159,8 @@ const server = http.createServer(async (req, res) => {
                             toggleCustomWsBufInput();
 
                             document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
+                            document.getElementById('display-ws-keep').innerText = (data.ws_proxy_cfg.keepAlive || 15000) + "ms";
+                            document.getElementById('display-ws-buf').innerText = (data.ws_proxy_cfg.maxBuffer || 32768) + " Bytes";
                         }
 
                         let ztContainer = document.getElementById('zt-container');
