@@ -34,6 +34,7 @@ const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 const CFIP_FILE = "/tmp/cfip.txt";
 const NET_SETTING_FILE = "/tmp/net_settings.json";
+const WS_PROXY_CONFIG_FILE = "/tmp/ws_proxy_config.json";
 
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
@@ -47,7 +48,9 @@ if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH);
 }
 
-// FUNGSI LOAD & SAVE SETTINGAN NETWORK/DNS CUSTOM
+// ========================================================
+// HELPER NETWORK & WS-PROXY CONFIG
+// ========================================================
 function getNetworkSettings() {
     try {
         if (fs.existsSync(NET_SETTING_FILE)) {
@@ -60,6 +63,26 @@ function getNetworkSettings() {
 function saveNetworkSettings(dns_type, custom_dns, engine) {
     try {
         fs.writeFileSync(NET_SETTING_FILE, JSON.stringify({ dns_type, custom_dns, engine }, null, 2));
+    } catch(e) {}
+}
+
+function getWsProxyConfig() {
+    try {
+        if (fs.existsSync(WS_PROXY_CONFIG_FILE)) {
+            return JSON.parse(fs.readFileSync(WS_PROXY_CONFIG_FILE, 'utf8'));
+        }
+    } catch (e) {}
+    return { sshPort: 22, keepAlive: 15000, maxBuffer: 32768 };
+}
+
+function saveWsProxyConfig(sshPort, keepAlive, maxBuffer) {
+    try {
+        const data = {
+            sshPort: parseInt(sshPort) || 22,
+            keepAlive: parseInt(keepAlive) || 15000,
+            maxBuffer: parseInt(maxBuffer) || 32768
+        };
+        fs.writeFileSync(WS_PROXY_CONFIG_FILE, JSON.stringify(data, null, 2));
     } catch(e) {}
 }
 
@@ -266,7 +289,6 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
-// 🔧 BACKEND DYNAMIC CONFIG ENGINE (WS, gRPC, HTTP/2, TCP) + CUSTOM DNS
 async function generateConfig() {
   const netSettings = getNetworkSettings();
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
@@ -340,7 +362,6 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  // REAL CUSTOM DNS INJECTION
   let dnsValue = (netSettings.custom_dns || "").trim();
   let dnsServers = [];
 
@@ -490,7 +511,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
-    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS (VERIFIKASI ADMIN)
+    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -510,6 +531,17 @@ const server = http.createServer(async (req, res) => {
         });
 
         return res.end(JSON.stringify({ status: "success", message: `Setting Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
+    }
+
+    // ⚡ API ENDPOINT SET WS-PROXY SSH CONTROLLER
+    if (pathName === '/api/set-wsproxy') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (!verifyAdminPassword(query.pass)) {
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
+        }
+
+        saveWsProxyConfig(query.ssh_port, query.keep_alive, query.max_buffer);
+        return res.end(JSON.stringify({ status: "success", message: `WS-Proxy Updated! Target SSH Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -579,6 +611,7 @@ const server = http.createServer(async (req, res) => {
         let ztVmessDomains = getDomainsByPort(['8001']);
         let passConfigured = getAdminPassword() !== null;
         let netSettings = getNetworkSettings();
+        let wsProxyCfg = getWsProxyConfig();
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
             ? `${process.env.RAILWAY_TCP_PROXY_DOMAIN}:${process.env.RAILWAY_TCP_PROXY_PORT}`
@@ -596,6 +629,7 @@ const server = http.createServer(async (req, res) => {
             dns_type: netSettings.dns_type,
             custom_dns: netSettings.custom_dns,
             engine_mode: netSettings.engine,
+            ws_proxy_cfg: wsProxyCfg,
             ...hwInfo, 
             ssh_online: cleanOnlineStr || "0" 
         }));
@@ -676,10 +710,10 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN KONTROL TUNNEL, CUSTOM DNS & ENGINE -->
+                <!-- 🔒 MENU ADMIN KONTROL XRAY, DNS, ENGINE & WS-PROXY -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>⚙️ PENGATURAN TOKEN, DNS & ENGINE</span>
+                        <span>⚙️ PENGATURAN NETWORK, DNS & WS-PROXY</span>
                         <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; text-decoration: underline; font-size: 11px; display: none;">🔑 GANTI PASS ADMIN</span>
                     </div>
 
@@ -708,14 +742,36 @@ const server = http.createServer(async (req, res) => {
                             <input type="text" id="customDnsInput" class="input-ssh" placeholder="IP DNS (contoh: 8.8.8.8) atau URL DoH" style="font-family: monospace; color:#4ade80;">
                         </div>
 
-                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
-                        <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN CLOUDFLARE (SEMUA PORT)</button>
-                        <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
+                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 2px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
+
+                        <div class="border-lbl" style="border-color:#a855f7; color:#d8b4fe; margin-top:10px;">🔌 SETTINGAN WS-PROXY DROPBEAR / SSH TARGET</div>
+                        <div class="grid-3" style="margin-top:4px;">
+                            <div>
+                                <label class="lbl-vpn" style="color:#a855f7;">PORT DROPBEAR</label>
+                                <input type="number" id="wsPortInput" class="input-ssh" placeholder="22">
+                            </div>
+                            <div>
+                                <label class="lbl-vpn" style="color:#a855f7;">KEEPALIVE (MS)</label>
+                                <input type="number" id="wsKeepInput" class="input-ssh" placeholder="15000">
+                            </div>
+                            <div>
+                                <label class="lbl-vpn" style="color:#a855f7;">MAX BUFFER</label>
+                                <input type="number" id="wsBufInput" class="input-ssh" placeholder="32768">
+                            </div>
+                        </div>
+                        <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG WS-PROXY SSH</button>
+
+                        <div style="display:flex; gap:8px; margin-top:6px;">
+                            <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptSingleTokenInput()">🌐 TOKEN ARGO</button>
+                            <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CFIP</button>
+                        </div>
                     </div>
+
                     <div style="margin-top: 8px; font-size: 11px; color: #4ade80; text-align: center; font-weight: bold;">
                         <span>CFIP: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span>
                         <span> | DNS: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span>
-                        <span> | ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span>
+                        <span> | ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
+                        <span>WS-TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span>
                     </div>
                 </div>
 
@@ -912,6 +968,27 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
+                async function saveWsProxySettingUI() {
+                    if (!adminToken) {
+                        alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
+                        let loggedIn = await handleAdminAuthBtn();
+                        if (!loggedIn && !adminToken) return;
+                    }
+
+                    let port = document.getElementById('wsPortInput').value;
+                    let keep = document.getElementById('wsKeepInput').value;
+                    let buf = document.getElementById('wsBufInput').value;
+
+                    try {
+                        let res = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
+                        let data = await res.json();
+                        alert(data.message);
+                        if (data.status === "success") {
+                            updateStats();
+                        }
+                    } catch(e) { alert("Gagal memperbarui WS-Proxy!"); }
+                }
+
                 async function promptSingleTokenInput() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -981,6 +1058,12 @@ const server = http.createServer(async (req, res) => {
                         if(data.engine_mode) {
                             document.getElementById('engineSelect').value = data.engine_mode;
                             document.getElementById('display-engine').innerText = data.engine_mode.toUpperCase();
+                        }
+                        if(data.ws_proxy_cfg) {
+                            document.getElementById('wsPortInput').value = data.ws_proxy_cfg.sshPort;
+                            document.getElementById('wsKeepInput').value = data.ws_proxy_cfg.keepAlive;
+                            document.getElementById('wsBufInput').value = data.ws_proxy_cfg.maxBuffer;
+                            document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
                         }
 
                         let ztContainer = document.getElementById('zt-container');
@@ -1087,7 +1170,6 @@ const server = http.createServer(async (req, res) => {
                   } catch (e) {}
                 }
 
-                // GENERATOR LINK AUTO-ADAPT TRANSPORT TYPE
                 function buildConfig(protocol, type, evt) {
                   document.querySelectorAll('.btn-blue').forEach(b => b.classList.remove('btn-active'));
                   if(evt && evt.target) evt.target.classList.add('btn-active');
@@ -1179,7 +1261,9 @@ const server = http.createServer(async (req, res) => {
 server.on('upgrade', (req, socket, head) => {
   const urlPath = req.url.split('?')[0];
   if (urlPath === '/ssh-ws') {
-    const targetConn = require('net').createConnection({ port: 8880, host: '127.0.0.1' }, () => {
+    const wsCfg = getWsProxyConfig();
+    const targetPort = wsCfg.sshPort || 8880;
+    const targetConn = require('net').createConnection({ port: targetPort, host: '127.0.0.1' }, () => {
       let rawHeaders = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
       for (let i = 0; i < req.rawHeaders.length; i += 2) { rawHeaders += `${req.rawHeaders[i]}: ${req.rawHeaders[i+1]}\r\n`; }
       rawHeaders += '\r\n';
