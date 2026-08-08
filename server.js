@@ -511,13 +511,14 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
+    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
             return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
         }
         const dns_type = query.dns_type || "udp";
-        const custom_dns = query.custom_dns || "8.8.8.8";
+        const custom_dns = query.custom_dns ? decodeURIComponent(query.custom_dns) : "8.8.8.8";
         const engine = query.engine || "ws";
         
         saveNetworkSettings(dns_type, custom_dns, engine);
@@ -532,6 +533,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting V2Ray Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
     }
 
+    // ⚡ API ENDPOINT SET WS-PROXY SSH CONTROLLER
     if (pathName === '/api/set-wsproxy') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -644,53 +646,53 @@ const server = http.createServer(async (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #050811; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column;}
-                .container { background: #0d1322; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.9); border: 1px solid #1e293b; margin-bottom: 20px; }
+                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #000000; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column;}
+                .container { background: #000000; width: 100%; max-width: 500px; padding: 20px; border-radius: 16px; box-shadow: 0 0 20px rgba(56, 189, 248, 0.1); border: 1px solid #111827; margin-bottom: 20px; }
                 .header { text-align: center; margin-bottom: 20px; position: relative; }
                 h1 { font-size: 20px; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
                 .dev-tag { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: bold; }
-                .btn-login-trigger { position: absolute; top: 0; right: 0; background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
+                .btn-login-trigger { position: absolute; top: 0; right: 0; background: #111827; color: #f8fafc; border: 1px solid #1f2937; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
                 .status-container { text-align: center; margin-bottom: 15px; }
-                .status-badge { display: inline-block; background: #151f32; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #334155; }
+                .status-badge { display: inline-block; background: #0a0a0a; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #1f2937; }
                 .status-dot { height: 8px; width: 8px; background-color: #4ade80; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 8px #4ade80; }
                 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-                .stat-card { background: #151f32; padding: 12px; border-radius: 8px; border: 1px solid #24334a; text-align: left; }
+                .stat-card { background: #0a0a0a; padding: 12px; border-radius: 8px; border: 1px solid #1f2937; text-align: left; }
                 .stat-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
                 .stat-value { font-size: 14px; font-weight: bold; color: #f1f5f9; margin-top: 4px; }
-                .ssh-manager { background: #151f32; padding: 15px; border-radius: 12px; border: 1px solid #24334a; margin-bottom: 20px; position: relative;}
+                .ssh-manager { background: #0a0a0a; padding: 15px; border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 20px; position: relative;}
                 .ssh-title { font-size: 13px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
                 .input-group { display: flex; gap: 8px; margin-bottom: 10px; }
-                .input-ssh { background: #070a14; border: 1px solid #334155; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; outline: none; }
+                .input-ssh { background: #000000; border: 1px solid #1f2937; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; outline: none; }
                 .input-ssh:focus { border-color: #38bdf8; }
                 
-                .select-zt { background: #070a14; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
+                .select-zt { background: #000000; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
                 .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
                 .admin-status-lbl { font-size: 10px; font-weight: bold; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; }
-                .result-box { display: none; background: #070a14; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
+                .result-box { display: none; background: #000000; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
                 .btn-copy-result { display: none; background: #4ade80; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; margin-bottom: 15px; }
                 .ssh-list { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-                .ssh-list th { text-align: left; padding: 6px; color: #94a3b8; border-bottom: 1px solid #334155; }
-                .ssh-list td { padding: 6px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+                .ssh-list th { text-align: left; padding: 6px; color: #94a3b8; border-bottom: 1px solid #1f2937; }
+                .ssh-list td { padding: 6px; border-bottom: 1px solid #111827; vertical-align: middle; }
                 .btn-action-group { display: flex; gap: 4px; justify-content: flex-end; }
                 .btn-del { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; display: none; }
                 .btn-info { background: #eab308; color: #090d16; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; display: none; }
-                .url-section { background: #070a14; border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
+                .url-section { background: #000000; border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
                 .url-section th { font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
                 .url-box { font-family: monospace; font-size: 13px; word-break: break-all; color: #38bdf8; font-weight: bold; margin: 6px 0; }
                 .btn-copy { background: #38bdf8; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; }
                 .note { font-size: 11px; color: #64748b; text-align: center; line-height: 1.4; margin-top: 10px; }
 
-                .card-blue { background-color: #0d1730; border: 1px solid #1e2d54; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: left; }
-                .btn-blue { background-color: #172447; border: 1px solid #283c79; color: #93c5fd; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
-                .btn-blue:hover { border-color: #3b82f6; color: #fff; background-color: #1d3363; }
+                .card-blue { background-color: #050a14; border: 1px solid #1e293b; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: left; }
+                .btn-blue { background-color: #0f172a; border: 1px solid #1e293b; color: #93c5fd; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
+                .btn-blue:hover { border-color: #3b82f6; color: #fff; background-color: #1e293b; }
                 .btn-active { border-color: #60a5fa !important; color: #fff !important; background-color: #1d4ed8 !important; }
                 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
                 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
                 .lbl-vpn { font-size: 10px; color: #38bdf8; font-weight: bold; display: block; margin-bottom: 4px; text-transform: uppercase; }
                 .border-lbl { border-left: 2px solid #38bdf8; padding-left: 6px; font-size: 11px; font-weight: bold; margin-top: 12px; font-family: monospace; }
 
-                .zt-admin-card { background: #141126; border: 1px solid #8b5cf6; padding: 16px; border-radius: 12px; margin-bottom: 18px; }
-                .sub-box { background: #090c1a; border: 1px solid #29234d; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
+                .zt-admin-card { background: #000000; border: 1px solid #8b5cf6; padding: 16px; border-radius: 12px; margin-bottom: 18px; box-shadow: 0 0 15px rgba(139, 92, 246, 0.15); }
+                .sub-box { background: #05050a; border: 1px solid #1f1938; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
                 .sub-box-title { font-size: 12px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
                 .btn-token-trigger { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; border: none; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
             </style>
@@ -923,12 +925,12 @@ const server = http.createServer(async (req, res) => {
                         changePassBtn.style.display = "none";
                     } else if(adminToken) {
                         indicator.innerText = "ADMIN ROUTE"; indicator.style.color = "#4ade80"; indicator.style.background = "rgba(74, 222, 128, 0.1)"; 
-                        loginBtn.innerText = "🔒 LOGOUT"; loginBtn.style.background = "#1e293b"; loginBtn.style.color = "#f8fafc";
+                        loginBtn.innerText = "🔒 LOGOUT"; loginBtn.style.background = "#111827"; loginBtn.style.color = "#f8fafc";
                         changePassBtn.style.display = "inline";
                         document.querySelectorAll('.btn-del').forEach(b => b.style.display = "inline-block"); document.querySelectorAll('.btn-info').forEach(b => b.style.display = "inline-block");
                     } else {
                         indicator.innerText = "PUBLIC CREATION"; indicator.style.color = "#38bdf8"; indicator.style.background = "rgba(56, 189, 248, 0.1)"; 
-                        loginBtn.innerText = "🔑 LOGIN ADMIN"; loginBtn.style.background = "#1e293b"; loginBtn.style.color = "#f8fafc";
+                        loginBtn.innerText = "🔑 LOGIN ADMIN"; loginBtn.style.background = "#111827"; loginBtn.style.color = "#f8fafc";
                         changePassBtn.style.display = "none";
                         document.querySelectorAll('.btn-del').forEach(b => b.style.display = "none"); document.querySelectorAll('.btn-info').forEach(b => b.style.display = "none");
                     }
@@ -1016,6 +1018,8 @@ const server = http.createServer(async (req, res) => {
                     let customDns = (selDns === 'custom') ? document.getElementById('customDnsInput').value.trim() : selDns;
                     let engine = document.getElementById('engineSelect').value;
 
+                    if (!customDns) customDns = "8.8.8.8";
+
                     try {
                         let res = await fetch('/api/set-network?pass=' + encodeURIComponent(adminToken) + '&dns_type=' + dnsType + '&custom_dns=' + encodeURIComponent(customDns) + '&engine=' + engine);
                         let data = await res.json();
@@ -1036,13 +1040,17 @@ const server = http.createServer(async (req, res) => {
                     }
 
                     let selPort = document.getElementById('wsPortDropdown').value;
-                    let port = (selPort === 'custom') ? document.getElementById('wsPortInput').value : selPort;
+                    let port = (selPort === 'custom') ? document.getElementById('wsPortInput').value.trim() : selPort;
 
                     let selKeep = document.getElementById('wsKeepDropdown').value;
-                    let keep = (selKeep === 'custom') ? document.getElementById('wsKeepInput').value : selKeep;
+                    let keep = (selKeep === 'custom') ? document.getElementById('wsKeepInput').value.trim() : selKeep;
 
                     let selBuf = document.getElementById('wsBufDropdown').value;
-                    let buf = (selBuf === 'custom') ? document.getElementById('wsBufInput').value : selBuf;
+                    let buf = (selBuf === 'custom') ? document.getElementById('wsBufInput').value.trim() : selBuf;
+
+                    if (!port) port = "22";
+                    if (!keep) keep = "15000";
+                    if (!buf) buf = "32768";
 
                     try {
                         let res = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
