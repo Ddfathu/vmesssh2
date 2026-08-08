@@ -20,8 +20,8 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
-// ⚡ BIND PORT SESUAI ENVIRONMENT RAILWAY ATAU DEFAULT 8081
-const PORT = process.env.PORT || 8081; 
+// ⚡ KEMBALI KE PORT 8081 HARDCODE (SAMA DENGAN SCRIPT ASLI LU)
+const PORT = 8081; 
 
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
 
@@ -62,7 +62,7 @@ function getActiveCfip() {
     return process.env.CFIP || '104.17.3.81';
 }
 
-// FITUR BARU: GETTER DNS & NETWORK MODE VMESS
+// GETTER DNS & NETWORK MODE VMESS
 function getXrayDnsMode() {
     try {
         if (fs.existsSync(XRAY_DNS_FILE)) {
@@ -276,7 +276,7 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
-// ⚡ MODIFIKASI FITUR BARU: GENERATE CONFIG VMESS DENGAN PENGATURAN DNS & NETWORK MODE DYNAMIC
+// ⚡ GENERATE CONFIG VMESS DENGAN PENGATURAN DNS & NETWORK MODE DYNAMIC
 async function generateConfig() {
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
   const vmessPaths = readPathsFromFile('pathvmess.txt', '/vmess-argo');
@@ -480,7 +480,7 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-    // ⚡ FITUR BARU: API SET DNS & NETWORK VMESS/XRAY
+    // ⚡ API SET DNS & NETWORK VMESS/XRAY
     if (pathName === '/api/set-xray') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
