@@ -12,7 +12,7 @@ const exec = promisify(require('child_process').exec);
 const { execSync } = require('child_process');
 
 // ========================================================
-// VARIABEL KONFIGURASI GLOBAL
+// VARIABEL KONFIGURASI GLOBAL & PATH CONFIG
 // ========================================================
 const UPLOAD_URL = process.env.UPLOAD_URL || '';      
 const PROJECT_URL = process.env.PROJECT_URL || '';    
@@ -21,18 +21,21 @@ const FILE_PATH = process.env.FILE_PATH || '.tmp';
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
 const PORT = 8081; 
-
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
-
 const ARGO_PORT = 8001;            
-
-const CFIP = process.env.CFIP || '104.18.17.214';            
 const CFPORT = process.env.CFPORT || 443;                  
 const NAME = process.env.NAME || 'ddfathu';                        
 
 const LOG_PATH = path.join(FILE_PATH, "boot.log"); 
 const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
+
+// FILE PERSISTENSI SETTINGAN UI
+const CFIP_FILE = "/tmp/cfip.txt";
+const XRAY_DNS_FILE = "/tmp/xray_dns.txt";
+const XRAY_NET_FILE = "/tmp/xray_net.txt";
+const SSH_SETTINGS_FILE = "/tmp/ssh_settings.json";
+const BANNER_FILE = "/etc/dropbear_banner";
 
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
@@ -44,6 +47,61 @@ let cachedUserListDetails = "Semua user offline";
 
 if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH);
+}
+
+// ========================================================
+// FUNGSI GETTER & SETTER CONFIG DYNAMIC
+// ========================================================
+function getActiveCfip() {
+    try {
+        if (fs.existsSync(CFIP_FILE)) {
+            const savedIp = fs.readFileSync(CFIP_FILE, 'utf8').trim();
+            if (savedIp) return savedIp;
+        }
+    } catch(e) {}
+    return process.env.CFIP || '104.17.3.81';
+}
+
+function getXrayDnsMode() {
+    try {
+        if (fs.existsSync(XRAY_DNS_FILE)) {
+            return fs.readFileSync(XRAY_DNS_FILE, 'utf8').trim();
+        }
+    } catch(e) {}
+    return 'udp'; // default: udp
+}
+
+function getXrayNetworkMode() {
+    try {
+        if (fs.existsSync(XRAY_NET_FILE)) {
+            return fs.readFileSync(XRAY_NET_FILE, 'utf8').trim();
+        }
+    } catch(e) {}
+    return 'ws'; // default: ws
+}
+
+function getSshSettings() {
+    const defaultSettings = {
+        dropbear_buffer: 1048576,
+        dropbear_timeout: 300,
+        dropbear_keepalive: 15,
+        wsproxy_buffer: 64,
+        wsproxy_keepalive: 15,
+        badvpn_active: true,
+        badvpn_max_clients: 1000
+    };
+    try {
+        if (fs.existsSync(SSH_SETTINGS_FILE)) {
+            return { ...defaultSettings, ...JSON.parse(fs.readFileSync(SSH_SETTINGS_FILE, 'utf8')) };
+        }
+    } catch(e) {}
+    return defaultSettings;
+}
+
+function saveSshSettings(data) {
+    try {
+        fs.writeFileSync(SSH_SETTINGS_FILE, JSON.stringify(data, null, 2));
+    } catch(e) {}
 }
 
 function getAdminPassword() {
@@ -89,7 +147,6 @@ function saveDb(data) {
 
 let currentActiveDomain = '';
 
-// 🔍 FUNGSI RESTART SINGLE TUNNEL UNTUK SEMUA PORT
 function restartSingleTunnel(newToken) {
     const cp = require('child_process');
     cp.exec("pkill -9 -f 'cloudflared'", () => {
@@ -107,7 +164,6 @@ function restartSingleTunnel(newToken) {
     });
 }
 
-// 🔍 REGEX PARSER UNTUK FILTER DOMAIN DARI INGRESS LOGS
 function getDomainsByPort(targetPorts) {
     const domains = [];
     try {
@@ -250,22 +306,24 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
+  const netType = getXrayNetworkMode(); // ws / grpc
+
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: 'vless', settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: 'vless', settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   vmessPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   trojanPaths.forEach(p => { 
     const cp = nextPort++; 
     fallbacksList.push({ path: p, dest: cp }); 
-    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
+    inboundsList.push({ port: cp, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: netType, security: "none", wsSettings: { path: p } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] } }); 
   });
 
   inboundsList.unshift({
@@ -276,7 +334,10 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: ["https+local://8.8.8.8/dns-query"] }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
+  // Opsi DNS: UDP Direct Fast Mode vs DoH Mode
+  const dnsServers = getXrayDnsMode() === 'udp' ? ["8.8.8.8", "1.1.1.1"] : ["https+local://8.8.8.8/dns-query"];
+
+  const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: dnsServers }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
   fs.writeFileSync(path.join(FILE_PATH, 'config.json'), JSON.stringify(config, null, 2));
 }
 
@@ -336,16 +397,20 @@ async function extractDomains() {
 async function getMetaInfo() { try { const res = await axios.get('https://api.ip.sb/geoip'); return `${res.data.country_code}-${res.data.isp}`.replace(/\s+/g, '_'); } catch(e) { return 'RailwayServer'; } }
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo(); const nodeName = `${NAME}-${ISP}`;
+  const activeCfip = getActiveCfip();
   const defaultVless = readPathsFromFile('pathvless.txt', '/vless-argo')[0];
   const defaultVmess = readPathsFromFile('pathvmess.txt', '/vmess-argo')[0];
   const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
   
-  const VMESS = { v: '2', ps: `${nodeName}`, add: CFIP, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
-  const subTxt = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
+  const VMESS = { v: '2', ps: `${nodeName}`, add: activeCfip, port: CFPORT, id: UUID, aid: '0', scy: 'auto', net: getXrayNetworkMode(), type: 'none', host: argoDomain, path: `${defaultVmess}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+  const subTxt = `vless://${UUID}@${activeCfip}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultVless + '?ed=2560')}#${nodeName}\n\nvmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}\n\ntrojan://${UUID}@${activeCfip}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=${getXrayNetworkMode()}&host=${argoDomain}&path=${encodeURIComponent(defaultTrojan + '?ed=2560')}#${nodeName}`;
   subContent = Buffer.from(subTxt).toString('base64');
   fs.writeFileSync(subPath, subContent);
 }
 
+// ========================================================
+// HTTP ROUTER & API HANDLERS
+// ========================================================
 const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const pathName = parsedUrl.pathname;
@@ -367,23 +432,12 @@ const server = http.createServer(async (req, res) => {
         const defaultTrojan = readPathsFromFile('pathtrojan.txt', '/trojan-argo')[0];
         return res.end(JSON.stringify({ 
             uuid: UUID, 
+            cfip: getActiveCfip(),
+            dns_mode: getXrayDnsMode(),
+            net_mode: getXrayNetworkMode(),
             domain: currentActiveDomain || "Menunggu Quick Tunnel...", 
             paths: { vless: defaultVless, vmess: defaultVmess, trojan: defaultTrojan } 
         }));
-    }
-
-    if (pathName === '/api/logtunnel') {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end(fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf8') : "Log belum siap.");
-    }
-
-    if (pathName === '/api/lognamed') {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        if (fs.existsSync(ZT_LOG_PATH)) {
-            return res.end(fs.readFileSync(ZT_LOG_PATH, 'utf8'));
-        } else {
-            return res.end("Log Zero Trust belum terbuat atau file /tmp/named_tunnel.log tidak ditemukan.");
-        }
     }
 
     if (pathName === '/api/setup-pass') {
@@ -392,12 +446,9 @@ const server = http.createServer(async (req, res) => {
         const oldPass = query.old_pass ? query.old_pass.trim() : "";
         const currentPass = getAdminPassword();
 
-        if (currentPass) {
-            if (oldPass !== currentPass) {
-                return res.end(JSON.stringify({ status: "error", message: "Password Admin Lama Salah!" }));
-            }
+        if (currentPass && oldPass !== currentPass) {
+            return res.end(JSON.stringify({ status: "error", message: "Password Admin Lama Salah!" }));
         }
-        
         if (!newPass || newPass.length < 4) {
             return res.end(JSON.stringify({ status: "error", message: "Password minimal 4 karakter!" }));
         }
@@ -408,34 +459,58 @@ const server = http.createServer(async (req, res) => {
 
     if (pathName === '/api/set-token') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        if (!verifyAdminPassword(query.pass)) {
-            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
-        }
+        if (!verifyAdminPassword(query.pass)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
         
         const singleToken = query.token !== undefined ? query.token.trim() : null;
         if (singleToken !== null) restartSingleTunnel(singleToken);
 
-        return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
+        return res.end(JSON.stringify({ status: "success", message: "Token berhasil disimpan! Tunnel direstart..." }));
+    }
+
+    // 🌐 API HANDLER X-RAY SETTINGS
+    if (pathName === '/api/set-xray') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (!verifyAdminPassword(query.pass)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
+
+        if (query.cfip !== undefined) fs.writeFileSync(CFIP_FILE, query.cfip.trim());
+        if (query.dns !== undefined) fs.writeFileSync(XRAY_DNS_FILE, query.dns.trim());
+        if (query.net !== undefined) fs.writeFileSync(XRAY_NET_FILE, query.net.trim());
+
+        await generateConfig();
+        exec(`pkill -9 -f '${webName}' && nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+        if (currentActiveDomain) generateLinks(currentActiveDomain);
+
+        return res.end(JSON.stringify({ status: "success", message: "Pengaturan X-Ray Berhasil Diperbarui & Engine Direstart!" }));
+    }
+
+    // 🌐 API HANDLER SSH SETTINGS
+    if (pathName === '/api/set-ssh-config') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (!verifyAdminPassword(query.pass)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" }));
+
+        const sshData = getSshSettings();
+        if (query.db_buffer) sshData.dropbear_buffer = parseInt(query.db_buffer, 10);
+        if (query.db_timeout) sshData.dropbear_timeout = parseInt(query.db_timeout, 10);
+        if (query.db_keepalive) sshData.dropbear_keepalive = parseInt(query.db_keepalive, 10);
+        if (query.ws_buffer) sshData.wsproxy_buffer = parseInt(query.ws_buffer, 10);
+        if (query.badvpn !== undefined) sshData.badvpn_active = query.badvpn === 'true';
+
+        saveSshSettings(sshData);
+
+        // Applying Dropbear settings live
+        exec(`pkill -9 dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W ${sshData.dropbear_buffer} -K ${sshData.dropbear_keepalive} -I ${sshData.dropbear_timeout}`);
+
+        if (query.banner !== undefined) {
+            fs.writeFileSync(BANNER_FILE, query.banner);
+        }
+
+        return res.end(JSON.stringify({ status: "success", message: "Pengaturan SSH & Dropbear Live Updated!" }));
     }
 
     if (pathName === '/api/add') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(addSsh(query.user, query.pass, ipAddr, userAgent))); }
-    
-    if (pathName === '/api/delete') { 
-        res.writeHead(200, { 'Content-Type': 'application/json' }); 
-        if (!verifyAdminPassword(query.token)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" })); 
-        return res.end(JSON.stringify(deleteSsh(query.user))); 
-    }
-    
+    if (pathName === '/api/delete') { res.writeHead(200, { 'Content-Type': 'application/json' }); if (!verifyAdminPassword(query.token)) return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak!" })); return res.end(JSON.stringify(deleteSsh(query.user))); }
     if (pathName === '/api/list') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(listSsh())); }
-    
-    if (pathName === '/api/login') { 
-        res.writeHead(200, { 'Content-Type': 'application/json' }); 
-        const isPassConfigured = getAdminPassword() !== null;
-        if (!isPassConfigured) {
-            return res.end(JSON.stringify({ status: "not_configured", message: "Password Admin belum pernah dibuat!" }));
-        }
-        return res.end(JSON.stringify(verifyAdminPassword(query.pass) ? { status: "success", token: query.pass } : { status: "error", message: "Password Salah!" })); 
-    }
+    if (pathName === '/api/login') { res.writeHead(200, { 'Content-Type': 'application/json' }); const isPassConfigured = getAdminPassword() !== null; if (!isPassConfigured) return res.end(JSON.stringify({ status: "not_configured", message: "Password Admin belum pernah dibuat!" })); return res.end(JSON.stringify(verifyAdminPassword(query.pass) ? { status: "success", token: query.pass } : { status: "error", message: "Password Salah!" })); }
     
     if (pathName === '/api/stats') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -456,13 +531,28 @@ const server = http.createServer(async (req, res) => {
         let ztSshDomains = getDomainsByPort(['8880', '8881']);
         let ztVmessDomains = getDomainsByPort(['8001']);
         let passConfigured = getAdminPassword() !== null;
+        let bannerTxt = fs.existsSync(BANNER_FILE) ? fs.readFileSync(BANNER_FILE, 'utf8') : "";
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
             ? `${process.env.RAILWAY_TCP_PROXY_DOMAIN}:${process.env.RAILWAY_TCP_PROXY_PORT}`
             : (process.env.SNI || "Tidak Aktif");
         
         let cleanOnlineStr = String(hwInfo.ssh_online).replace(/👥/g, '').replace(/Active/g, '').replace(/Users/g, '').trim();
-        return res.end(JSON.stringify({ quick_url: quickUrl, zt_domains: ztSshDomains, zt_vmess_domains: ztVmessDomains, pass_configured: passConfigured, railway_url: rlwyUrl, status: "ONLINE", ...hwInfo, ssh_online: cleanOnlineStr || "0" }));
+        return res.end(JSON.stringify({ 
+            active_cfip: getActiveCfip(), 
+            dns_mode: getXrayDnsMode(),
+            net_mode: getXrayNetworkMode(),
+            ssh_settings: getSshSettings(),
+            banner: bannerTxt,
+            quick_url: quickUrl, 
+            zt_domains: ztSshDomains, 
+            zt_vmess_domains: ztVmessDomains, 
+            pass_configured: passConfigured, 
+            railway_url: rlwyUrl, 
+            status: "ONLINE", 
+            ...hwInfo, 
+            ssh_online: cleanOnlineStr || "0" 
+        }));
     }
 
     if (pathName === '/' || pathName === '/index.html') {
@@ -476,23 +566,35 @@ const server = http.createServer(async (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #090d16; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column;}
-                .container { background: #111827; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8); border: 1px solid #1f2937; margin-bottom: 20px; }
-                .header { text-align: center; margin-bottom: 20px; position: relative; }
-                h1 { font-size: 20px; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
+                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #090d16; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column; overflow-x: hidden; }
+                .container { background: #111827; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8); border: 1px solid #1f2937; margin-bottom: 20px; position: relative; }
+                
+                /* ☰ HAMBURGER MENU SIDEBAR STYLING */
+                .hamburger-btn { position: absolute; top: 20px; left: 20px; background: #1f2937; border: 1px solid #334155; color: #38bdf8; font-size: 20px; padding: 6px 12px; border-radius: 8px; cursor: pointer; z-index: 10; font-weight: bold; }
+                .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); display: none; z-index: 100; backdrop-filter: blur(3px); }
+                .sidebar-drawer { position: fixed; top: 0; left: -320px; width: 300px; height: 100vh; background: #0f172a; border-right: 1px solid #334155; z-index: 101; transition: 0.3s ease-in-out; padding: 20px; overflow-y: auto; box-shadow: 10px 0 25px rgba(0,0,0,0.5); }
+                .sidebar-drawer.active { left: 0; }
+                .sidebar-overlay.active { display: block; }
+                .sidebar-title { font-size: 16px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+                .close-sidebar { background: none; border: none; color: #ef4444; font-size: 22px; cursor: pointer; }
+
+                .header { text-align: center; margin-bottom: 20px; position: relative; margin-top: 10px; }
+                h1 { font-size: 18px; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
                 .dev-tag { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: bold; }
-                .btn-login-trigger { position: absolute; top: 0; right: 0; background: #334155; color: #f8fafc; border: 1px solid #4b5563; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
+                .btn-login-trigger { position: absolute; top: -10px; right: 0; background: #334155; color: #f8fafc; border: 1px solid #4b5563; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
                 .status-container { text-align: center; margin-bottom: 15px; }
                 .status-badge { display: inline-block; background: #1f2937; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #334155; }
                 .status-dot { height: 8px; width: 8px; background-color: #4ade80; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 8px #4ade80; }
+                
                 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                 .stat-card { background: #1f2937; padding: 12px; border-radius: 8px; border: 1px solid #334155; text-align: left; }
                 .stat-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
                 .stat-value { font-size: 14px; font-weight: bold; color: #f1f5f9; margin-top: 4px; }
+                
                 .ssh-manager { background: #1f2937; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; position: relative;}
                 .ssh-title { font-size: 13px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
                 .input-group { display: flex; gap: 8px; margin-bottom: 10px; }
-                .input-ssh { background: #030712; border: 1px solid #4b5563; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; }
+                .input-ssh { background: #030712; border: 1px solid #4b5563; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; outline: none; }
                 
                 .select-zt { background: #030712; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
                 .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
@@ -522,12 +624,94 @@ const server = http.createServer(async (req, res) => {
 
                 .zt-admin-card { background: #1a102f; border: 1px solid #a855f7; padding: 15px; border-radius: 12px; margin-bottom: 15px; }
                 .btn-token-trigger { width: 100%; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; border: none; transition: 0.2s; }
+                .form-group-sb { margin-bottom: 12px; }
+                .lbl-sb { font-size: 11px; color: #94a3b8; font-weight: bold; display: block; margin-bottom: 4px; }
+                .btn-save-sb { background: #38bdf8; color: #090d16; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; width: 100%; margin-top: 5px; }
             </style>
         </head>
         <body>
+            <!-- OVERLAY & SIDEBAR MENU DRAWER ☰ -->
+            <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
+            <div class="sidebar-drawer" id="sidebar">
+                <div class="sidebar-title">
+                    <span>⚙️ SETTINGS MENU</span>
+                    <button class="close-sidebar" onclick="toggleSidebar()">✕</button>
+                </div>
+
+                <!-- CATEGORY 1: X-RAY SETTINGS -->
+                <div style="background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;">
+                    <span style="font-size: 12px; font-weight: bold; color: #38bdf8; display: block; margin-bottom: 10px;">⚡ X-RAY SETTINGS</span>
+                    
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Cloudflare Clean IP (CFIP):</label>
+                        <input type="text" id="sb-cfip" class="input-ssh" placeholder="104.17.3.81">
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">DNS Resolver Engine:</label>
+                        <select id="sb-dns" class="input-ssh" style="color:#38bdf8; font-weight:bold;">
+                            <option value="udp">🚀 UDP Fast Mode (8.8.8.8 / 1.1.1.1)</option>
+                            <option value="doh">🔒 DoH Secure Mode (https+local)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Transport Protocol:</label>
+                        <select id="sb-net" class="input-ssh" style="color:#38bdf8; font-weight:bold;">
+                            <option value="ws">🌐 WebSocket (WS)</option>
+                            <option value="grpc">⚡ gRPC Engine</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-save-sb" onclick="saveXraySettingsUI()">💾 SIMPAN SETTINGAN X-RAY</button>
+                </div>
+
+                <!-- CATEGORY 2: SSH SETTINGS -->
+                <div style="background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155;">
+                    <span style="font-size: 12px; font-weight: bold; color: #a855f7; display: block; margin-bottom: 10px;">🔑 SSH & DROPBEAR SETTINGS</span>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Dropbear Receive Window Buffer (`-W`):</label>
+                        <select id="sb-db-buffer" class="input-ssh" style="color:#a855f7; font-weight:bold;">
+                            <option value="1048576">Standard (1 MB Buffer)</option>
+                            <option value="2097152">Turbo (2 MB Buffer)</option>
+                            <option value="4194304">Extreme (4 MB Buffer)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Dropbear Idle Timeout (`-I` Sec):</label>
+                        <input type="number" id="sb-db-timeout" class="input-ssh" value="300">
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Dropbear KeepAlive (`-K` Sec):</label>
+                        <input type="number" id="sb-db-keepalive" class="input-ssh" value="15">
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">WS-Proxy HighWaterMark Buffer:</label>
+                        <select id="sb-ws-buffer" class="input-ssh" style="color:#a855f7; font-weight:bold;">
+                            <option value="32">32 KB (Low Latency)</option>
+                            <option value="64">64 KB (Balanced Default)</option>
+                            <option value="128">128 KB (High Throughput)</option>
+                            <option value="256">256 KB (Extreme Speed Booster)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group-sb">
+                        <label class="lbl-sb">Dropbear HTML Banner Editor:</label>
+                        <textarea id="sb-banner" class="input-ssh" style="height: 80px; font-family: monospace; font-size: 10px;"></textarea>
+                    </div>
+
+                    <button class="btn-save-sb" style="background:#a855f7; color:#fff;" onclick="saveSshSettingsUI()">💾 SIMPAN SETTINGAN SSH</button>
+                </div>
+            </div>
+
             <div class="container">
+                <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
                 <div class="header">
-                    <h1>👑 SELAMAT DATANG DI PANEL SSH/VPN RAILWAY 👑</h1>
+                    <h1>👑 PANEL SSH & VPN RAILWAY 👑</h1>
                     <div class="dev-tag">DYNAMIC TRIPLE-TUNNEL NODE CORE ACTIVE</div>
                     <button class="btn-login-trigger" id="admin-login-btn" onclick="handleAdminAuthBtn()">🔑 LOGIN ADMIN</button>
                 </div>
@@ -540,10 +724,10 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU 1 TOKEN UNTUK SEMUA PORT -->
+                <!-- 🔒 MENU ADMIN TOKEN TUNNEL -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>⚙️ SINGLE TOKEN MULTI-SERVICE TUNNEL</span>
+                        <span>⚙️ TOKEN CLOUDFLARE ARGO</span>
                         <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; text-decoration: underline; font-size: 11px; display: none;">🔑 GANTI PASS ADMIN</span>
                     </div>
 
@@ -569,7 +753,7 @@ const server = http.createServer(async (req, res) => {
                     </table>
                 </div>
 
-                <!-- DOMAIN TUNNEL SSH (DARI INGRESS RULE PORT 8880) -->
+                <!-- DOMAIN TUNNEL SSH (PORT 8880) -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -578,7 +762,7 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
-                <!-- DOMAIN TUNNEL VMESS (DARI INGRESS RULE PORT 8001) -->
+                <!-- DOMAIN TUNNEL VMESS (PORT 8001) -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -647,6 +831,11 @@ const server = http.createServer(async (req, res) => {
                 let adminToken = localStorage.getItem("admin_session_token") || "";
                 let savedUsersData = []; 
                 let isPassConfigured = false;
+
+                function toggleSidebar() {
+                    document.getElementById('sidebar').classList.toggle('active');
+                    document.getElementById('overlay').classList.toggle('active');
+                }
                 
                 function checkAdminUI() {
                     let indicator = document.getElementById('admin-indicator'); 
@@ -733,6 +922,36 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
+                async function saveXraySettingsUI() {
+                    if (!adminToken) { alert("Login Admin dulu, Bos!"); handleAdminAuthBtn(); return; }
+                    let cfip = document.getElementById('sb-cfip').value.trim();
+                    let dns = document.getElementById('sb-dns').value;
+                    let net = document.getElementById('sb-net').value;
+
+                    try {
+                        let res = await fetch('/api/set-xray?pass=' + encodeURIComponent(adminToken) + '&cfip=' + encodeURIComponent(cfip) + '&dns=' + encodeURIComponent(dns) + '&net=' + encodeURIComponent(net));
+                        let data = await res.json();
+                        alert(data.message);
+                        updateStats();
+                    } catch(e) { alert("Gagal menyimpan X-Ray Settings!"); }
+                }
+
+                async function saveSshSettingsUI() {
+                    if (!adminToken) { alert("Login Admin dulu, Bos!"); handleAdminAuthBtn(); return; }
+                    let dbBuffer = document.getElementById('sb-db-buffer').value;
+                    let dbTimeout = document.getElementById('sb-db-timeout').value;
+                    let dbKeepalive = document.getElementById('sb-db-keepalive').value;
+                    let wsBuffer = document.getElementById('sb-ws-buffer').value;
+                    let banner = document.getElementById('sb-banner').value;
+
+                    try {
+                        let res = await fetch('/api/set-ssh-config?pass=' + encodeURIComponent(adminToken) + '&db_buffer=' + dbBuffer + '&db_timeout=' + dbTimeout + '&db_keepalive=' + dbKeepalive + '&ws_buffer=' + wsBuffer + '&banner=' + encodeURIComponent(banner));
+                        let data = await res.json();
+                        alert(data.message);
+                        updateStats();
+                    } catch(e) { alert("Gagal menyimpan SSH Settings!"); }
+                }
+
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
                     let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
@@ -754,7 +973,19 @@ const server = http.createServer(async (req, res) => {
                         document.getElementById('cpu').innerText = data.cpu_model; document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; document.getElementById('disk').innerText = data.disk_usage; document.getElementById('uptime').innerText = data.uptime;
                         let detailActiveList = data.user_list_details || "Semua user offline";
                         document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
-                        
+
+                        // Populate values to Sidebar Drawer
+                        if (data.active_cfip) document.getElementById('sb-cfip').value = data.active_cfip;
+                        if (data.dns_mode) document.getElementById('sb-dns').value = data.dns_mode;
+                        if (data.net_mode) document.getElementById('sb-net').value = data.net_mode;
+                        if (data.banner) document.getElementById('sb-banner').value = data.banner;
+                        if (data.ssh_settings) {
+                            document.getElementById('sb-db-buffer').value = data.ssh_settings.dropbear_buffer || "1048576";
+                            document.getElementById('sb-db-timeout').value = data.ssh_settings.dropbear_timeout || "300";
+                            document.getElementById('sb-db-keepalive').value = data.ssh_settings.dropbear_keepalive || "15";
+                            document.getElementById('sb-ws-buffer').value = data.ssh_settings.wsproxy_buffer || "64";
+                        }
+
                         // Handler Domain SSH (Port 8880/8881)
                         let ztContainer = document.getElementById('zt-container');
                         if (data.zt_domains && data.zt_domains.length > 1) {
@@ -784,7 +1015,6 @@ const server = http.createServer(async (req, res) => {
                         document.getElementById('railway-url').innerText = data.railway_url; 
                         document.getElementById('quick-url').innerText = data.quick_url;
 
-                        // 🔍 UPDATE OPTION DROPDOWN DOMAIN KHUSUS CONFIG GENERATOR (HANYA QUICK & PORT 8001)
                         let domainSelect = document.getElementById('domainSelect');
                         let currentSelected = domainSelect.value;
                         let optionsHtml = '';
@@ -909,7 +1139,7 @@ const server = http.createServer(async (req, res) => {
                       let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: "ws", type: "none", host: bugHost, path: basePath, tls: "tls", sni: bugHost };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + bugHost + '&type=ws&host=' + bugHost + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=ws&host=' + host + '&path=' + encodeURIComponent(basePath) + '#' + encodeURIComponent(remark);
                     }
                   } 
                   else if (type === 'cdn') {
