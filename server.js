@@ -511,7 +511,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
-    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -530,10 +529,9 @@ const server = http.createServer(async (req, res) => {
             }, 1000);
         });
 
-        return res.end(JSON.stringify({ status: "success", message: `Setting Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
+        return res.end(JSON.stringify({ status: "success", message: `Setting V2Ray Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
     }
 
-    // ⚡ API ENDPOINT SET WS-PROXY SSH CONTROLLER
     if (pathName === '/api/set-wsproxy') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -541,7 +539,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         saveWsProxyConfig(query.ssh_port, query.keep_alive, query.max_buffer);
-        return res.end(JSON.stringify({ status: "success", message: `WS-Proxy Updated! Target SSH Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
+        return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -646,52 +644,55 @@ const server = http.createServer(async (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #090d16; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column;}
-                .container { background: #111827; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8); border: 1px solid #1f2937; margin-bottom: 20px; }
+                body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #050811; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; flex-direction: column;}
+                .container { background: #0d1322; width: 100%; max-width: 500px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.9); border: 1px solid #1e293b; margin-bottom: 20px; }
                 .header { text-align: center; margin-bottom: 20px; position: relative; }
                 h1 { font-size: 20px; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
                 .dev-tag { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: bold; }
-                .btn-login-trigger { position: absolute; top: 0; right: 0; background: #334155; color: #f8fafc; border: 1px solid #4b5563; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
+                .btn-login-trigger { position: absolute; top: 0; right: 0; background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 4px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
                 .status-container { text-align: center; margin-bottom: 15px; }
-                .status-badge { display: inline-block; background: #1f2937; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #334155; }
+                .status-badge { display: inline-block; background: #151f32; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #334155; }
                 .status-dot { height: 8px; width: 8px; background-color: #4ade80; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 8px #4ade80; }
                 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-                .stat-card { background: #1f2937; padding: 12px; border-radius: 8px; border: 1px solid #334155; text-align: left; }
+                .stat-card { background: #151f32; padding: 12px; border-radius: 8px; border: 1px solid #24334a; text-align: left; }
                 .stat-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
                 .stat-value { font-size: 14px; font-weight: bold; color: #f1f5f9; margin-top: 4px; }
-                .ssh-manager { background: #1f2937; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; position: relative;}
+                .ssh-manager { background: #151f32; padding: 15px; border-radius: 12px; border: 1px solid #24334a; margin-bottom: 20px; position: relative;}
                 .ssh-title { font-size: 13px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
                 .input-group { display: flex; gap: 8px; margin-bottom: 10px; }
-                .input-ssh { background: #030712; border: 1px solid #4b5563; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; }
+                .input-ssh { background: #070a14; border: 1px solid #334155; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; outline: none; }
+                .input-ssh:focus { border-color: #38bdf8; }
                 
-                .select-zt { background: #030712; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
+                .select-zt { background: #070a14; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
                 .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
                 .admin-status-lbl { font-size: 10px; font-weight: bold; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; }
-                .result-box { display: none; background: #030712; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
+                .result-box { display: none; background: #070a14; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
                 .btn-copy-result { display: none; background: #4ade80; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; margin-bottom: 15px; }
                 .ssh-list { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
                 .ssh-list th { text-align: left; padding: 6px; color: #94a3b8; border-bottom: 1px solid #334155; }
-                .ssh-list td { padding: 6px; border-bottom: 1px solid #1f2937; vertical-align: middle; }
+                .ssh-list td { padding: 6px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
                 .btn-action-group { display: flex; gap: 4px; justify-content: flex-end; }
                 .btn-del { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; display: none; }
                 .btn-info { background: #eab308; color: #090d16; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; display: none; }
-                .url-section { background: #030712; border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
+                .url-section { background: #070a14; border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
                 .url-section th { font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
                 .url-box { font-family: monospace; font-size: 13px; word-break: break-all; color: #38bdf8; font-weight: bold; margin: 6px 0; }
                 .btn-copy { background: #38bdf8; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; }
                 .note { font-size: 11px; color: #64748b; text-align: center; line-height: 1.4; margin-top: 10px; }
 
-                .card-blue { background-color: #0c132b; border: 1px solid #1e295b; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: left; }
-                .btn-blue { background-color: #131d42; border: 1px solid #283c79; color: #93c5fd; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
-                .btn-blue:hover { border-color: #3b82f6; color: #fff; background-color: #1a2756; }
+                .card-blue { background-color: #0d1730; border: 1px solid #1e2d54; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: left; }
+                .btn-blue { background-color: #172447; border: 1px solid #283c79; color: #93c5fd; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
+                .btn-blue:hover { border-color: #3b82f6; color: #fff; background-color: #1d3363; }
                 .btn-active { border-color: #60a5fa !important; color: #fff !important; background-color: #1d4ed8 !important; }
                 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
                 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
                 .lbl-vpn { font-size: 10px; color: #38bdf8; font-weight: bold; display: block; margin-bottom: 4px; text-transform: uppercase; }
                 .border-lbl { border-left: 2px solid #38bdf8; padding-left: 6px; font-size: 11px; font-weight: bold; margin-top: 12px; font-family: monospace; }
 
-                .zt-admin-card { background: #1a102f; border: 1px solid #a855f7; padding: 15px; border-radius: 12px; margin-bottom: 15px; }
-                .btn-token-trigger { width: 100%; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; border: none; transition: 0.2s; }
+                .zt-admin-card { background: #141126; border: 1px solid #8b5cf6; padding: 16px; border-radius: 12px; margin-bottom: 18px; }
+                .sub-box { background: #090c1a; border: 1px solid #29234d; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
+                .sub-box-title { font-size: 12px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+                .btn-token-trigger { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; border: none; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
             </style>
         </head>
         <body>
@@ -710,55 +711,62 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN KONTROL XRAY, DNS, ENGINE & WS-PROXY -->
+                <!-- 🔒 MENU ADMIN KONTROL UTAMA -->
                 <div class="zt-admin-card" id="zt-admin-box">
-                    <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>⚙️ PENGATURAN NETWORK, DNS & WS-PROXY</span>
+                    <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>⚙️ SYSTEM CONTROL PANEL</span>
                         <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; text-decoration: underline; font-size: 11px; display: none;">🔑 GANTI PASS ADMIN</span>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div class="grid-2" style="margin-bottom:0;">
-                            <div>
-                                <label class="lbl-vpn" style="color:#eab308;">DNS MODE</label>
-                                <select id="dnsTypeSelect" class="input-ssh" style="font-family: monospace; color: #eab308; font-weight: bold;" onchange="toggleDnsPlaceholder()">
-                                    <option value="udp">🚀 UDP Fast DNS (IP)</option>
-                                    <option value="doh">🔒 DoH Secure DNS (HTTPS URL)</option>
-                                </select>
+                    <!-- BOX 1: PENGATURAN V2RAY SERVER -->
+                    <div class="sub-box" style="border-color: #0284c7;">
+                        <div class="sub-box-title" style="color:#38bdf8;">⚙️ PENGATURAN V2RAY SERVER</div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div class="grid-2" style="margin-bottom:0;">
+                                <div>
+                                    <label class="lbl-vpn" style="color:#eab308;">DNS MODE</label>
+                                    <select id="dnsTypeSelect" class="input-ssh" style="color: #eab308; font-weight: bold;" onchange="toggleDnsPlaceholder()">
+                                        <option value="udp">🚀 UDP Fast DNS (IP)</option>
+                                        <option value="doh">🔒 DoH Secure DNS (HTTPS URL)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="lbl-vpn" style="color:#38bdf8;">ENGINE MODE</label>
+                                    <select id="engineSelect" class="input-ssh" style="color: #38bdf8; font-weight: bold;">
+                                        <option value="ws">🌐 WebSocket (WS)</option>
+                                        <option value="grpc">⚡ gRPC Engine</option>
+                                        <option value="h2">🚀 HTTP/2 (H2)</option>
+                                        <option value="tcp">🔌 TCP (Raw Direct)</option>
+                                    </select>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="lbl-vpn" style="color:#38bdf8;">ENGINE MODE</label>
-                                <select id="engineSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
-                                    <option value="ws">🌐 WebSocket (WS)</option>
-                                    <option value="grpc">⚡ gRPC Engine</option>
-                                    <option value="h2">🚀 HTTP/2 (H2)</option>
-                                    <option value="tcp">🔌 TCP (Raw Direct)</option>
+                                <label class="lbl-vpn" style="color:#4ade80;">CUSTOM DNS IP / DOH URL</label>
+                                <select id="dnsDropdown" class="input-ssh" style="color:#4ade80;" onchange="toggleCustomDnsInput()">
+                                    <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
+                                    <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
+                                    <option value="9.9.9.9">Quad9 DNS (9.9.9.9)</option>
+                                    <option value="https://1.1.1.1/dns-query">Cloudflare DoH (https://1.1.1.1/dns-query)</option>
+                                    <option value="https://dns.google/dns-query">Google DoH (https://dns.google/dns-query)</option>
+                                    <option value="https://dns.adguard-dns.com/dns-query">AdGuard DoH (https://dns.adguard-dns.com/dns-query)</option>
+                                    <option value="custom">✏️ Custom...</option>
                                 </select>
+                                <input type="text" id="customDnsInput" class="input-ssh" placeholder="Ketik IP DNS atau URL DoH Manual..." style="color:#4ade80; display:none; margin-top:4px;">
                             </div>
+
+                            <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN V2RAY SERVER CONFIG</button>
                         </div>
+                    </div>
 
-                        <div>
-                            <label class="lbl-vpn" style="color:#4ade80;">CUSTOM DNS IP / DOH URL</label>
-                            <select id="dnsDropdown" class="input-ssh" style="font-family: monospace; color:#4ade80;" onchange="toggleCustomDnsInput()">
-                                <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
-                                <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
-                                <option value="9.9.9.9">Quad9 DNS (9.9.9.9)</option>
-                                <option value="https://1.1.1.1/dns-query">Cloudflare DoH (https://1.1.1.1/dns-query)</option>
-                                <option value="https://dns.google/dns-query">Google DoH (https://dns.google/dns-query)</option>
-                                <option value="https://dns.adguard-dns.com/dns-query">AdGuard DoH (https://dns.adguard-dns.com/dns-query)</option>
-                                <option value="custom">✏️ Custom...</option>
-                            </select>
-                            <input type="text" id="customDnsInput" class="input-ssh" placeholder="Ketik IP DNS atau URL DoH Manual..." style="font-family: monospace; color:#4ade80; display:none; margin-top:4px;">
-                        </div>
-
-                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 2px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
-
-                        <div class="border-lbl" style="border-color:#a855f7; color:#d8b4fe; margin-top:10px;">🔌 SETTINGAN WS-PROXY DROPBEAR / SSH TARGET</div>
+                    <!-- BOX 2: PENGATURAN SSH SERVER -->
+                    <div class="sub-box" style="border-color: #8b5cf6;">
+                        <div class="sub-box-title" style="color:#d8b4fe;">🔌 PENGATURAN SSH SERVER</div>
                         <div class="grid-3" style="margin-top:4px;">
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">PORT DROPBEAR</label>
-                                <select id="wsPortDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsPortInput()">
-                                    <option value="22">Port 22 (SSH OpenSSH)</option>
+                                <select id="wsPortDropdown" class="input-ssh" style="color:#a855f7;" onchange="toggleCustomWsPortInput()">
+                                    <option value="22">Port 22 (OpenSSH)</option>
                                     <option value="109">Port 109 (Dropbear Direct)</option>
                                     <option value="143">Port 143 (Dropbear Alt)</option>
                                     <option value="447">Port 447 (SSL Stunnel)</option>
@@ -768,38 +776,43 @@ const server = http.createServer(async (req, res) => {
                             </div>
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">KEEPALIVE (MS)</label>
-                                <select id="wsKeepDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsKeepInput()">
-                                    <option value="5000">5000 (5 Detik - Fast)</option>
-                                    <option value="15000">15000 (15 Detik - Standard)</option>
-                                    <option value="30000">30000 (30 Detik - Relaxed)</option>
+                                <select id="wsKeepDropdown" class="input-ssh" style="color:#a855f7;" onchange="toggleCustomWsKeepInput()">
+                                    <option value="5000">5000 (5s - Fast)</option>
+                                    <option value="15000">15000 (15s - Normal)</option>
+                                    <option value="30000">30000 (30s - Slow)</option>
                                     <option value="custom">✏️ Custom...</option>
                                 </select>
                                 <input type="number" id="wsKeepInput" class="input-ssh" placeholder="Interval MS..." style="display:none; margin-top:4px;">
                             </div>
                             <div>
                                 <label class="lbl-vpn" style="color:#a855f7;">MAX BUFFER</label>
-                                <select id="wsBufDropdown" class="input-ssh" style="font-family: monospace; color:#a855f7;" onchange="toggleCustomWsBufInput()">
-                                    <option value="16384">16384 (16KB - Tight)</option>
-                                    <option value="32768">32768 (32KB - Normal)</option>
-                                    <option value="65536">65536 (64KB - Large)</option>
+                                <select id="wsBufDropdown" class="input-ssh" style="color:#a855f7;" onchange="toggleCustomWsBufInput()">
+                                    <option value="16384">16384 (16KB)</option>
+                                    <option value="32768">32768 (32KB)</option>
+                                    <option value="65536">65536 (64KB)</option>
                                     <option value="custom">✏️ Custom...</option>
                                 </select>
                                 <input type="number" id="wsBufInput" class="input-ssh" placeholder="Bytes Limit..." style="display:none; margin-top:4px;">
                             </div>
                         </div>
-                        <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG WS-PROXY SSH</button>
-
-                        <div style="display:flex; gap:8px; margin-top:6px;">
-                            <button class="btn-token-trigger" style="background: #a855f7; color: #fff;" onclick="promptSingleTokenInput()">🌐 TOKEN ARGO</button>
-                            <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CFIP</button>
-                        </div>
+                        <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff; margin-top:10px;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG SSH SERVER</button>
                     </div>
 
-                    <div style="margin-top: 8px; font-size: 11px; color: #4ade80; text-align: center; font-weight: bold;">
-                        <span>CFIP: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span>
-                        <span> | DNS: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span>
-                        <span> | ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
-                        <span>WS-TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span>
+                    <!-- TOMBOL BESAR TOKEN ARGO TUNNEL & CFIP -->
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+                        <button class="btn-token-trigger" style="background: linear-gradient(135deg, #a855f7, #6b21a8); color: #fff; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN ARGO TUNNEL</button>
+                        <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
+                    </div>
+
+                    <!-- BOX 3: INFO STATUS -->
+                    <div class="sub-box" style="border-color: #10b981; margin-bottom: 0;">
+                        <div class="sub-box-title" style="color:#10b981; text-align:center; display:block;">📋 PENGATURAN YANG TERPASANG DI SERVER</div>
+                        <div style="font-size: 11px; color: #4ade80; text-align: center; font-weight: bold; line-height: 1.6;">
+                            <span>CFIP AKTIF: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span><br>
+                            <span>DNS MODE: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span> | 
+                            <span>ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
+                            <span>SSH TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span>
+                        </div>
                     </div>
                 </div>
 
@@ -820,7 +833,7 @@ const server = http.createServer(async (req, res) => {
                     </table>
                 </div>
 
-                <!-- DOMAIN TUNNEL SSH (DARI INGRESS RULE PORT 8880) -->
+                <!-- DOMAIN TUNNEL SSH -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -829,7 +842,7 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
-                <!-- DOMAIN TUNNEL VMESS (DARI INGRESS RULE PORT 8001) -->
+                <!-- DOMAIN TUNNEL VMESS -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -910,12 +923,12 @@ const server = http.createServer(async (req, res) => {
                         changePassBtn.style.display = "none";
                     } else if(adminToken) {
                         indicator.innerText = "ADMIN ROUTE"; indicator.style.color = "#4ade80"; indicator.style.background = "rgba(74, 222, 128, 0.1)"; 
-                        loginBtn.innerText = "🔒 LOGOUT"; loginBtn.style.background = "#334155"; loginBtn.style.color = "#f8fafc";
+                        loginBtn.innerText = "🔒 LOGOUT"; loginBtn.style.background = "#1e293b"; loginBtn.style.color = "#f8fafc";
                         changePassBtn.style.display = "inline";
                         document.querySelectorAll('.btn-del').forEach(b => b.style.display = "inline-block"); document.querySelectorAll('.btn-info').forEach(b => b.style.display = "inline-block");
                     } else {
                         indicator.innerText = "PUBLIC CREATION"; indicator.style.color = "#38bdf8"; indicator.style.background = "rgba(56, 189, 248, 0.1)"; 
-                        loginBtn.innerText = "🔑 LOGIN ADMIN"; loginBtn.style.background = "#334155"; loginBtn.style.color = "#f8fafc";
+                        loginBtn.innerText = "🔑 LOGIN ADMIN"; loginBtn.style.background = "#1e293b"; loginBtn.style.color = "#f8fafc";
                         changePassBtn.style.display = "none";
                         document.querySelectorAll('.btn-del').forEach(b => b.style.display = "none"); document.querySelectorAll('.btn-info').forEach(b => b.style.display = "none");
                     }
