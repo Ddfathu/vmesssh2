@@ -595,7 +595,7 @@ const server = http.createServer(async (req, res) => {
                 .select-zt { background: #030712; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
                 .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
                 .admin-status-lbl { font-size: 10px; font-weight: bold; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; }
-                .result-box { display: none; background: #030712; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
+                .result-box { display: none; background: #030712; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-space: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
                 .btn-copy-result { display: none; background: #4ade80; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; margin-bottom: 15px; }
                 .ssh-list { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
                 .ssh-list th { text-align: left; padding: 6px; color: #94a3b8; border-bottom: 1px solid #334155; }
@@ -766,7 +766,7 @@ const server = http.createServer(async (req, res) => {
 
                 <div class="card-blue">
                   <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e295b; padding-bottom: 8px;">
-                    <span style="font-size: 13px; font-weight: bold; color: #fff; tracking-wider;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
+                    <span style="font-size: 13px; font-weight: bold; color: #fff; letter-spacing: 1px;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
                   </div>
                   <div class="grid-2">
                     <div>
@@ -811,7 +811,7 @@ const server = http.createServer(async (req, res) => {
                       <span id="out-type" style="color: #38bdf8;">CONFIG</span>
                       <span onclick="copyOutConfig()" style="color: #4ade80; cursor: pointer; text-decoration: underline;">[COPY]</span>
                     </div>
-                    <p id="configText" style="word-break: break-all; color: #fff; max-h: 100px; overflow-y: auto; font-family: monospace;"></p>
+                    <p id="configText" style="word-break: break-all; color: #fff; max-height: 100px; overflow-y: auto; font-family: monospace;"></p>
                   </div>
                 </div>
 
@@ -851,7 +851,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -898,7 +898,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     
                     if (inputToken === null) return;
 
@@ -944,7 +944,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -1038,7 +1038,12 @@ const server = http.createServer(async (req, res) => {
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { 
+                    let userObj = savedUsersData.find(u => u.username === username); 
+                    if(userObj) { 
+                        alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); 
+                    } 
+                }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
