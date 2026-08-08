@@ -579,6 +579,7 @@ const server = http.createServer(async (req, res) => {
 
         saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
 
+        // 1. Update Banner Dropbear Instan
         if (banner) {
             try {
                 fs.writeFileSync('/etc/dropbear_banner', banner);
@@ -595,6 +596,7 @@ const server = http.createServer(async (req, res) => {
             try { fs.writeFileSync('/etc/dropbear_banner', defaultBanner); } catch(e){}
         }
 
+        // 2. Restart Dropbear Terpisah
         exec("pkill -9 dropbear", () => {
             setTimeout(() => {
                 const wsCfg = getWsProxyConfig();
@@ -605,6 +607,16 @@ const server = http.createServer(async (req, res) => {
             }, 1000);
         });
 
+        // 3. Kill badvpn-udpgw lama & restart ke port baru secara real-time
+        exec("pkill -9 badvpn-udpgw", () => {
+            setTimeout(() => {
+                if (fs.existsSync('/usr/local/bin/badvpn-udpgw')) {
+                    exec(`nohup /usr/local/bin/badvpn-udpgw --listen-addr 0.0.0.0:${udpgw_port} --max-clients ${udpgw_max_clients} --max-connections-for-client 50 >/dev/null 2>&1 &`);
+                }
+            }, 1000);
+        });
+
+        // 4. Apply BBR Switch
         try {
             if (enable_bbr === "true") {
                 exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
@@ -613,7 +625,7 @@ const server = http.createServer(async (req, res) => {
             }
         } catch(e) {}
 
-        return res.end(JSON.stringify({ status: "success", message: "System Config (Banner/BBR/UDPGW) Berhasil Disimpan & Di-apply!" }));
+        return res.end(JSON.stringify({ status: "success", message: `System Config (Banner/BBR/UDPGW:${udpgw_port}) Berhasil Disimpan & Di-apply!` }));
     }
 
     if (pathName === '/api/set-token') {
