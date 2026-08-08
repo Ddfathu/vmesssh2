@@ -600,7 +600,7 @@ const server = http.createServer(async (req, res) => {
             }
         } catch(e) {}
 
-        return res.end(JSON.stringify({ status: "success", message: `Sistem Diperbarui! BadVPN Aktif di Port: ${udpgw_port}, BBR: ${enable_bbr.toUpperCase()}` }));
+        return res.end(JSON.stringify({ status: "success", message: `Sistem Diperbarui! BadVPN Port: ${udpgw_port}, BBR: ${enable_bbr.toUpperCase()}` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -949,7 +949,7 @@ const server = http.createServer(async (req, res) => {
                 <div class="url-section"><div class="url-title">Quick Tunnel url (Vmess/Vless/Trojan Sub)</div><div class="url-box" id="quick-url">Loading...</div><button class="btn-copy" id="btn-copy-quick" onclick="copyTxt('quick-url', 'btn-copy-quick')">📋 COPY SUB DOMAIN</button></div>
 
                 <div class="card-blue">
-                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e2d54; padding-bottom: 8px;">
+                  <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e295b; padding-bottom: 8px;">
                     <span style="font-size: 13px; font-weight: bold; color: #fff; tracking-wider;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
                   </div>
                   <div class="grid-2">
@@ -1058,7 +1058,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -1148,26 +1148,18 @@ const server = http.createServer(async (req, res) => {
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
-                    let msgList = [];
-
                     try {
                         let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
                         let data1 = await res1.json();
-                        if (data1.message) msgList.push(data1.message);
-                    } catch(e) {
-                        msgList.push("Error API WS-Proxy");
-                    }
 
-                    try {
                         let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
                         let data2 = await res2.json();
-                        if (data2.message) msgList.push(data2.message);
-                    } catch(e) {
-                        msgList.push("Error API System");
-                    }
 
-                    alert(msgList.join(" | "));
-                    updateStats();
+                        alert((data1.message || "WS Proxy Disimpan") + " | " + (data2.message || "Sistem Diperbarui"));
+                        updateStats();
+                    } catch(e) {
+                        alert("Gagal memperbarui SSH Config!");
+                    }
                 }
 
                 async function promptSingleTokenInput() {
@@ -1177,7 +1169,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     if (inputToken === null) return;
 
                     try {
@@ -1195,7 +1187,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\nContoh: 104.17.3.81\n\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
                     if (inputIp === null) return;
 
                     try {
@@ -1208,7 +1200,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -1220,13 +1212,19 @@ const server = http.createServer(async (req, res) => {
 
                 async function updateStats() {
                     try {
-                        let res = await fetch('/api/stats'); let data = await res.json();
+                        let res = await fetch('/api/stats'); 
+                        if (!res.ok) return;
+                        let data = await res.json();
                         isPassConfigured = data.pass_configured;
                         checkAdminUI();
 
-                        document.getElementById('cpu').innerText = data.cpu_model; document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; document.getElementById('disk').innerText = data.disk_usage; document.getElementById('uptime').innerText = data.uptime;
+                        if(data.cpu_model) document.getElementById('cpu').innerText = data.cpu_model; 
+                        if(data.ram_used) document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; 
+                        if(data.disk_usage) document.getElementById('disk').innerText = data.disk_usage; 
+                        if(data.uptime) document.getElementById('uptime').innerText = data.uptime;
+                        
                         let detailActiveList = data.user_list_details || "Semua user offline";
-                        document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
+                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || 0) + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
 
                         if(data.dns_type) {
@@ -1264,13 +1262,13 @@ const server = http.createServer(async (req, res) => {
                             if (foundB) { bDrop.value = data.ws_proxy_cfg.maxBuffer; } else { bDrop.value = 'custom'; document.getElementById('wsBufInput').value = data.ws_proxy_cfg.maxBuffer; }
                             toggleCustomWsBufInput();
 
-                            document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
+                            document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort || 22;
                             document.getElementById('display-ws-keep').innerText = (data.ws_proxy_cfg.keepAlive || 15000) + "ms";
                             document.getElementById('display-ws-buf').innerText = (data.ws_proxy_cfg.maxBuffer || 32768) + " Bytes";
                         }
 
                         if(data.sys_settings) {
-                            if(data.sys_settings.banner) document.getElementById('bannerInput').value = data.sys_settings.banner;
+                            if(data.sys_settings.banner !== undefined) document.getElementById('bannerInput').value = data.sys_settings.banner;
                             if(data.sys_settings.enable_bbr) document.getElementById('bbrSelect').value = data.sys_settings.enable_bbr;
                             if(data.sys_settings.udpgw_port) document.getElementById('udpgwPortSelect').value = data.sys_settings.udpgw_port;
 
@@ -1302,8 +1300,8 @@ const server = http.createServer(async (req, res) => {
                             ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>';
                         }
 
-                        document.getElementById('railway-url').innerText = data.railway_url; 
-                        document.getElementById('quick-url').innerText = data.quick_url;
+                        if(data.railway_url) document.getElementById('railway-url').innerText = data.railway_url; 
+                        if(data.quick_url) document.getElementById('quick-url').innerText = data.quick_url;
 
                         let domainSelect = document.getElementById('domainSelect');
                         let currentSelected = domainSelect.value;
