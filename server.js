@@ -35,6 +35,7 @@ const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 const CFIP_FILE = "/tmp/cfip.txt";
 const NET_SETTING_FILE = "/tmp/net_settings.json";
 const WS_PROXY_CONFIG_FILE = "/tmp/ws_proxy_config.json";
+const SYSTEM_CONFIG_FILE = "/tmp/system_config.json";
 
 const ADMIN_PASS_FILE = "/tmp/admin_pass.txt";
 const STATS_PATH = "/tmp/server_stats.json";
@@ -49,7 +50,7 @@ if (!fs.existsSync(FILE_PATH)) {
 }
 
 // ========================================================
-// HELPER NETWORK & WS-PROXY CONFIG
+// HELPER NETWORK, WS-PROXY & SYSTEM CONFIG
 // ========================================================
 function getNetworkSettings() {
     try {
@@ -83,6 +84,27 @@ function saveWsProxyConfig(sshPort, keepAlive, maxBuffer) {
             maxBuffer: parseInt(maxBuffer) || 32768
         };
         fs.writeFileSync(WS_PROXY_CONFIG_FILE, JSON.stringify(data, null, 2));
+    } catch(e) {}
+}
+
+function getSystemSettings() {
+    try {
+        if (fs.existsSync(SYSTEM_CONFIG_FILE)) {
+            return JSON.parse(fs.readFileSync(SYSTEM_CONFIG_FILE, 'utf8'));
+        }
+    } catch(e) {}
+    return { banner: "", enable_bbr: "true", udpgw_port: "7300", udpgw_max_clients: "1000" };
+}
+
+function saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients) {
+    try {
+        const data = {
+            banner: banner || "",
+            enable_bbr: enable_bbr || "true",
+            udpgw_port: udpgw_port || "7300",
+            udpgw_max_clients: udpgw_max_clients || "1000"
+        };
+        fs.writeFileSync(SYSTEM_CONFIG_FILE, JSON.stringify(data, null, 2));
     } catch(e) {}
 }
 
@@ -544,6 +566,40 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
+    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW)
+    if (pathName === '/api/set-system') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (!verifyAdminPassword(query.pass)) {
+            return res.end(JSON.stringify({ status: "error", message: "Akses Ditolak! Anda harus Login Admin terlebih dahulu." }));
+        }
+
+        const banner = query.banner ? decodeURIComponent(query.banner) : "";
+        const enable_bbr = query.enable_bbr || "true";
+        const udpgw_port = query.udpgw_port || "7300";
+        const udpgw_max_clients = query.udpgw_max_clients || "1000";
+
+        saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
+
+        // Update Banner Dropbear Instan secara Real-Time
+        if (banner) {
+            try {
+                fs.writeFileSync('/etc/dropbear_banner', banner);
+                exec("pkill dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W 1048576 -K 15 -I 300");
+            } catch(e) {}
+        }
+
+        // Apply BBR Switch secara Real-Time ke Sysctl Kernel
+        try {
+            if (enable_bbr === "true") {
+                exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
+            } else {
+                exec("sysctl -w net.ipv4.tcp_congestion_control=cubic 2>/dev/null");
+            }
+        } catch(e) {}
+
+        return res.end(JSON.stringify({ status: "success", message: "System Config (Banner/BBR/UDPGW) Berhasil Disimpan & Di-apply!" }));
+    }
+
     if (pathName === '/api/set-token') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -612,6 +668,7 @@ const server = http.createServer(async (req, res) => {
         let passConfigured = getAdminPassword() !== null;
         let netSettings = getNetworkSettings();
         let wsProxyCfg = getWsProxyConfig();
+        let sysSettings = getSystemSettings();
         
         let rlwyUrl = process.env.RAILWAY_TCP_PROXY_DOMAIN && process.env.RAILWAY_TCP_PROXY_PORT
             ? `${process.env.RAILWAY_TCP_PROXY_DOMAIN}:${process.env.RAILWAY_TCP_PROXY_PORT}`
@@ -630,6 +687,7 @@ const server = http.createServer(async (req, res) => {
             custom_dns: netSettings.custom_dns,
             engine_mode: netSettings.engine,
             ws_proxy_cfg: wsProxyCfg,
+            sys_settings: sysSettings,
             ...hwInfo, 
             ssh_online: cleanOnlineStr || "0" 
         }));
@@ -797,6 +855,33 @@ const server = http.createServer(async (req, res) => {
                                 <input type="number" id="wsBufInput" class="input-ssh" placeholder="Bytes Limit..." style="display:none; margin-top:4px;">
                             </div>
                         </div>
+
+                        <!-- SUB-BOX SISTEM FITUR: BANNER, BBR, UDPGW -->
+                        <div style="margin-top:12px; border-top:1px solid #1f1938; padding-top:10px;">
+                            <div>
+                                <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML ALLOWED)</label>
+                                <textarea id="bannerInput" class="input-ssh" style="height:60px; font-family:monospace; font-size:11px;" placeholder="Kosongkan untuk memakai banner standar..."></textarea>
+                            </div>
+
+                            <div class="grid-2" style="margin-top:8px; margin-bottom:0;">
+                                <div>
+                                    <label class="lbl-vpn" style="color:#10b981;">TCP BBR SWITCH</label>
+                                    <select id="bbrSelect" class="input-ssh" style="color:#10b981; font-weight:bold;">
+                                        <option value="true">⚡ ON (TCP BBR Active)</option>
+                                        <option value="false">❌ OFF (TCP Cubic Standard)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="lbl-vpn" style="color:#f43f5e;">BADVPN UDPGW PORT</label>
+                                    <select id="udpgwPortSelect" class="input-ssh" style="color:#f43f5e; font-weight:bold;">
+                                        <option value="7300">Port 7300 (Standard Game)</option>
+                                        <option value="7200">Port 7200 (Alt Game 1)</option>
+                                        <option value="7100">Port 7100 (Alt Game 2)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff; margin-top:10px;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG SSH SERVER</button>
                     </div>
 
@@ -815,7 +900,9 @@ const server = http.createServer(async (req, res) => {
                             <span>ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
                             <span>SSH TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span> | 
                             <span>KEEPALIVE: </span><span id="display-ws-keep" style="color:#38bdf8; font-family:monospace;">15000ms</span> | 
-                            <span>MAX BUFFER: </span><span id="display-ws-buf" style="color:#eab308; font-family:monospace;">32768 Bytes</span>
+                            <span>MAX BUFFER: </span><span id="display-ws-buf" style="color:#eab308; font-family:monospace;">32768 Bytes</span><br>
+                            <span>TCP BBR: </span><span id="display-bbr" style="color:#10b981; font-family:monospace;">ON</span> | 
+                            <span>UDPGW PORT: </span><span id="display-udpgw" style="color:#f43f5e; font-family:monospace;">7300</span>
                         </div>
                     </div>
                 </div>
@@ -1050,18 +1137,24 @@ const server = http.createServer(async (req, res) => {
                     let selBuf = document.getElementById('wsBufDropdown').value;
                     let buf = (selBuf === 'custom') ? document.getElementById('wsBufInput').value.trim() : selBuf;
 
+                    let banner = document.getElementById('bannerInput').value.trim();
+                    let bbr = document.getElementById('bbrSelect').value;
+                    let udpgw = document.getElementById('udpgwPortSelect').value;
+
                     if (!port) port = "22";
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
                     try {
-                        let res = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
-                        let data = await res.json();
-                        alert(data.message);
-                        if (data.status === "success") {
-                            updateStats();
-                        }
-                    } catch(e) { alert("Gagal memperbarui WS-Proxy!"); }
+                        let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
+                        let data1 = await res1.json();
+
+                        let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
+                        let data2 = await res2.json();
+
+                        alert(data1.message + "\\n" + data2.message);
+                        updateStats();
+                    } catch(e) { alert("Gagal memperbarui SSH Config!"); }
                 }
 
                 async function promptSingleTokenInput() {
@@ -1161,6 +1254,15 @@ const server = http.createServer(async (req, res) => {
                             document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
                             document.getElementById('display-ws-keep').innerText = (data.ws_proxy_cfg.keepAlive || 15000) + "ms";
                             document.getElementById('display-ws-buf').innerText = (data.ws_proxy_cfg.maxBuffer || 32768) + " Bytes";
+                        }
+
+                        if(data.sys_settings) {
+                            if(data.sys_settings.banner) document.getElementById('bannerInput').value = data.sys_settings.banner;
+                            if(data.sys_settings.enable_bbr) document.getElementById('bbrSelect').value = data.sys_settings.enable_bbr;
+                            if(data.sys_settings.udpgw_port) document.getElementById('udpgwPortSelect').value = data.sys_settings.udpgw_port;
+
+                            document.getElementById('display-bbr').innerText = (data.sys_settings.enable_bbr === "true") ? "ON" : "OFF";
+                            document.getElementById('display-udpgw').innerText = data.sys_settings.udpgw_port || "7300";
                         }
 
                         let ztContainer = document.getElementById('zt-container');
