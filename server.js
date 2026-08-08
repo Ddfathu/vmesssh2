@@ -533,7 +533,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
-    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -555,7 +554,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting V2Ray Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
     }
 
-    // ⚡ API ENDPOINT SET WS-PROXY SSH CONTROLLER
     if (pathName === '/api/set-wsproxy') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -566,7 +564,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
-    // 🛠️ FIX RESTART REAL-TIME BADVPN UDPGW & BANNER DROPBEAR
     if (pathName === '/api/set-system') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -580,16 +577,13 @@ const server = http.createServer(async (req, res) => {
 
         saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
 
-        // 1. Tulis Banner ke /etc/dropbear_banner & /tmp/dropbear_banner
-        try {
-            if (banner) {
-                fs.writeFileSync('/etc/dropbear_banner', banner);
+        if (banner) {
+            try {
                 fs.writeFileSync('/tmp/dropbear_banner', banner);
-                exec("pkill dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W 1048576 -K 15 -I 300");
-            }
-        } catch(e) {}
+                exec("pkill dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /tmp/dropbear_banner -W 1048576 -K 15 -I 300 2>/dev/null");
+            } catch(e) {}
+        }
 
-        // 2. Restart BadVPN UDPGW dengan Port Baru secara Instan!
         try {
             exec("pkill -9 badvpn-udpgw", () => {
                 setTimeout(() => {
@@ -598,7 +592,6 @@ const server = http.createServer(async (req, res) => {
             });
         } catch(e) {}
 
-        // 3. Switch BBR / Cubic Kernel
         try {
             if (enable_bbr === "true") {
                 exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
@@ -1065,7 +1058,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -1131,7 +1124,6 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                // FIX PENANGANAN API TERPISAH SUPAYA JIKA KETUAR ERROR LANGSUNG MUNCUL DETAILNYA
                 async function saveWsProxySettingUI() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -1156,21 +1148,25 @@ const server = http.createServer(async (req, res) => {
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
-                    let results = [];
+                    let msgList = [];
 
                     try {
                         let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
                         let data1 = await res1.json();
-                        results.push(data1.message);
-                    } catch(e) { results.push("Gagal simpan WS-Proxy"); }
+                        if (data1.message) msgList.push(data1.message);
+                    } catch(e) {
+                        msgList.push("Error API WS-Proxy");
+                    }
 
                     try {
                         let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
                         let data2 = await res2.json();
-                        results.push(data2.message);
-                    } catch(e) { results.push("Gagal simpan System (Banner/BBR/UDPGW)"); }
+                        if (data2.message) msgList.push(data2.message);
+                    } catch(e) {
+                        msgList.push("Error API System");
+                    }
 
-                    alert(results.join("\n\n"));
+                    alert(msgList.join(" | "));
                     updateStats();
                 }
 
@@ -1181,7 +1177,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     if (inputToken === null) return;
 
                     try {
@@ -1199,7 +1195,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\nContoh: 104.17.3.81\n\n(Kosongkan lalu klik OK untuk reset ke default)");
                     if (inputIp === null) return;
 
                     try {
@@ -1212,7 +1208,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -1339,13 +1335,13 @@ const server = http.createServer(async (req, res) => {
                         if(data.status === "success" && data.users.length > 0) {
                             savedUsersData = data.users; 
                             data.users.forEach(u => {
-                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\\''+u.username+'\\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\\''+u.username+'\\')">HAPUS</button></div></td></tr>';
+                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\''+u.username+'\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\''+u.username+'\')">HAPUS</button></div></td></tr>';
                             });
                             checkAdminUI();
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
