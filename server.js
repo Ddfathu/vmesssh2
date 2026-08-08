@@ -8,8 +8,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require('crypto');
 const { promisify } = require('util');
-const exec = promisify(require('child_process').exec);
-const { execSync } = require('child_process');
+const execPromise = promisify(require('child_process').exec);
+const { exec, execSync } = require('child_process');
 
 // ========================================================
 // VARIABEL KONFIGURASI GLOBAL
@@ -162,17 +162,16 @@ function saveDb(data) {
 let currentActiveDomain = '';
 
 function restartSingleTunnel(newToken) {
-    const cp = require('child_process');
-    cp.exec("pkill -9 -f 'cloudflared'", () => {
+    exec("pkill -9 -f 'cloudflared'", () => {
         setTimeout(() => {
             if (newToken && newToken.trim()) {
                 fs.writeFileSync(ZT_SINGLE_TOKEN_FILE, newToken.trim());
-                cp.exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
+                exec(`nohup ${botPath} tunnel run --protocol http2 --no-tls-verify --token "${newToken.trim()}" > ${ZT_LOG_PATH} 2>&1 &`);
             } else {
                 if (fs.existsSync(ZT_SINGLE_TOKEN_FILE)) fs.unlinkSync(ZT_SINGLE_TOKEN_FILE);
                 if (fs.existsSync(ZT_LOG_PATH)) fs.writeFileSync(ZT_LOG_PATH, "Token Dihapus.");
                 let args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${LOG_PATH} --loglevel info --url http://localhost:${ARGO_PORT}`;
-                cp.exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+                exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
             }
         }, 1000);
     });
@@ -566,7 +565,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
-    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW) - PERBAIKAN LOGIKA RESTART DROPBEAR
+    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW)
     if (pathName === '/api/set-system') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -580,7 +579,6 @@ const server = http.createServer(async (req, res) => {
 
         saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
 
-        // Update Banner Dropbear Instan secara Real-Time
         if (banner) {
             try {
                 fs.writeFileSync('/etc/dropbear_banner', banner);
@@ -597,18 +595,16 @@ const server = http.createServer(async (req, res) => {
             try { fs.writeFileSync('/etc/dropbear_banner', defaultBanner); } catch(e){}
         }
 
-        // Execution Kill & Restart Dropbear Terpisah (Anti Fail)
-        require('child_process').exec("pkill -9 dropbear", () => {
+        exec("pkill -9 dropbear", () => {
             setTimeout(() => {
                 const wsCfg = getWsProxyConfig();
                 const sshPort = wsCfg.sshPort || 22;
-                require('child_process').exec(`/usr/sbin/dropbear -p 127.0.0.1:${sshPort} -b /etc/dropbear_banner -W 1048576 -K 15 -I 300`, (err) => {
+                exec(`/usr/sbin/dropbear -p 127.0.0.1:${sshPort} -b /etc/dropbear_banner -W 1048576 -K 15 -I 300`, (err) => {
                     if (err) console.error("Gagal restart Dropbear:", err.message);
                 });
             }, 1000);
         });
 
-        // Apply BBR Switch secara Real-Time ke Sysctl Kernel
         try {
             if (enable_bbr === "true") {
                 exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
@@ -1231,9 +1227,12 @@ const server = http.createServer(async (req, res) => {
                         isPassConfigured = data.pass_configured;
                         checkAdminUI();
 
-                        document.getElementById('cpu').innerText = data.cpu_model; document.getElementById('ram').innerText = data.ram_used + " / " + data.ram_total; document.getElementById('disk').innerText = data.disk_usage; document.getElementById('uptime').innerText = data.uptime;
+                        document.getElementById('cpu').innerText = data.cpu_model || "N/A"; 
+                        document.getElementById('ram').innerText = (data.ram_used || "0") + " / " + (data.ram_total || "0"); 
+                        document.getElementById('disk').innerText = data.disk_usage || "0%"; 
+                        document.getElementById('uptime').innerText = data.uptime || "0 Hours";
                         let detailActiveList = data.user_list_details || "Semua user offline";
-                        document.getElementById('ssh').innerHTML = "👥 " + data.ssh_online + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
+                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || "0") + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
 
                         if(data.dns_type) {
@@ -1309,8 +1308,8 @@ const server = http.createServer(async (req, res) => {
                             ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>';
                         }
 
-                        document.getElementById('railway-url').innerText = data.railway_url; 
-                        document.getElementById('quick-url').innerText = data.quick_url;
+                        document.getElementById('railway-url').innerText = data.railway_url || "Tidak Aktif"; 
+                        document.getElementById('quick-url').innerText = data.quick_url || "Menunggu Quick Tunnel...";
 
                         let domainSelect = document.getElementById('domainSelect');
                         let currentSelected = domainSelect.value;
@@ -1450,7 +1449,7 @@ const server = http.createServer(async (req, res) => {
                       let jsonVmess = { v: "2", ps: remark, add: host, port: 443, id: uuid, aid: 0, scy: "auto", net: netType, type: netType === 'grpc' ? 'multi' : 'none', host: host, path: netType === 'grpc' ? 'grpc-service' : (netType === 'h2' ? '/h2-path' : pathBug), tls: "tls", sni: host };
                       configResult = 'vmess://' + safeBtoa(JSON.stringify(jsonVmess));
                     } else if (protocol === 'trojan') {
-                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : pathBug), tls: "tls", sni: host };
+                      configResult = 'trojan://' + uuid + '@' + host + ':443?security=tls&sni=' + host + '&type=' + netType + (netType === 'grpc' ? '&serviceName=grpc-service' : (netType === 'h2' ? '&path=/h2-path' : '&host=' + host + '&path=' + encodeURIComponent(pathBug))) + '#' + encodeURIComponent(remark);
                     }
                   }
 
@@ -1463,7 +1462,7 @@ const server = http.createServer(async (req, res) => {
                   alert('Config Berhasil Disalin!');
                 }
 
-                setInterval(updateStats, 600000); 
+                setInterval(updateStats, 5000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
@@ -1513,11 +1512,11 @@ server.listen(PORT, () => {
     }, 3000);
 
     setInterval(() => {
-        require('child_process').exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
+        exec("df -h / | awk 'NR==2 {print $5}'", (err, stdout) => {
             if (!err && stdout.trim()) cachedDiskUsage = stdout.trim();
         });
 
-        require('child_process').exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
+        exec("netstat -anp 2>/dev/null | grep dropbear | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u", (err, stdout) => {
             if (!err && stdout.trim()) {
                 const ipLines = stdout.trim().split('\n').filter(Boolean);
                 if (ipLines.length > 0) {
