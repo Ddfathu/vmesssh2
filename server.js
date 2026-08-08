@@ -20,17 +20,22 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.tmp';   
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
+// ⚡ BIND PORT SESUAI ENVIRONMENT RAILWAY ATAU DEFAULT 8081
 const PORT = process.env.PORT || 8081; 
+
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
+
 const ARGO_PORT = 8001;            
+
 const CFPORT = process.env.CFPORT || 443;                  
 const NAME = process.env.NAME || 'ddfathu';                        
 
 const LOG_PATH = path.join(FILE_PATH, "boot.log"); 
 const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
-
 const CFIP_FILE = "/tmp/cfip.txt";
+
+// FITUR BARU: FILE CONFIG DNS & NETWORK VMESS/XRAY
 const XRAY_DNS_FILE = "/tmp/xray_dns.txt";
 const XRAY_NET_FILE = "/tmp/xray_net.txt";
 
@@ -43,9 +48,10 @@ let cachedSshOnline = "0 User";
 let cachedUserListDetails = "Semua user offline";
 
 if (!fs.existsSync(FILE_PATH)) {
-  fs.mkdirSync(FILE_PATH, { recursive: true });
+  fs.mkdirSync(FILE_PATH);
 }
 
+// FUNGSI MENDAPATKAN CFIP AKTIF
 function getActiveCfip() {
     try {
         if (fs.existsSync(CFIP_FILE)) {
@@ -56,6 +62,7 @@ function getActiveCfip() {
     return process.env.CFIP || '104.17.3.81';
 }
 
+// FITUR BARU: GETTER DNS & NETWORK MODE VMESS
 function getXrayDnsMode() {
     try {
         if (fs.existsSync(XRAY_DNS_FILE)) {
@@ -117,6 +124,7 @@ function saveDb(data) {
 
 let currentActiveDomain = '';
 
+// 🔍 FUNGSI RESTART SINGLE TUNNEL UNTUK SEMUA PORT
 function restartSingleTunnel(newToken) {
     const cp = require('child_process');
     cp.exec("pkill -9 -f 'cloudflared'", () => {
@@ -134,6 +142,7 @@ function restartSingleTunnel(newToken) {
     });
 }
 
+// 🔍 REGEX PARSER UNTUK FILTER DOMAIN DARI INGRESS LOGS
 function getDomainsByPort(targetPorts) {
     const domains = [];
     try {
@@ -197,21 +206,19 @@ function listSsh() {
     try {
         const users = [];
         const dbInfo = loadDb();
-        if (fs.existsSync('/etc/passwd')) {
-            const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
-            const lines = passwdContent.split('\n');
+        const passwdContent = fs.readFileSync('/etc/passwd', 'utf8');
+        const lines = passwdContent.split('\n');
+        
+        for (let line of lines) {
+            if (!line.trim()) continue;
+            const parts = line.split(':');
+            const username = parts[0];
+            const uid = parseInt(parts[2], 10);
+            const shell = parts[parts.length - 1];
             
-            for (let line of lines) {
-                if (!line.trim()) continue;
-                const parts = line.split(':');
-                const username = parts[0];
-                const uid = parseInt(parts[2], 10);
-                const shell = parts[parts.length - 1];
-                
-                if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
-                    const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
-                    users.push({ username, uid, shell, ...extra });
-                }
+            if (uid >= 1000 && !["nobody", "ubuntu", "sshd", "dropbear", "stunnel"].includes(username)) {
+                const extra = dbInfo[username] || { password: "-", ip: "Unknown", user_agent: "Unknown" };
+                users.push({ username, uid, shell, ...extra });
             }
         }
         return { status: "success", total: users.length, users: users };
@@ -226,7 +233,9 @@ function addSsh(username, password, ipAddr, userAgent) {
         return { status: "error", message: "Username/Password mengandung karakter ilegal!" };
     }
     try {
-        try { execSync(`useradd -m -s /bin/bash ${username} 2>/dev/null`); execSync(`echo '${username}:${password}' | chpasswd 2>/dev/null`); } catch(e) {}
+        execSync(`useradd -m -s /bin/bash ${username}`);
+        execSync(`echo '${username}:${password}' | chpasswd`);
+        
         const dbInfo = loadDb();
         dbInfo[username] = { password, ip: ipAddr, user_agent: userAgent };
         saveDb(dbInfo);
@@ -246,14 +255,14 @@ function addSsh(username, password, ipAddr, userAgent) {
             `================================`;
         return { status: "success", message: accountDetails };
     } catch (e) {
-        return { status: "error", message: `Gagal membuat user.` };
+        return { status: "error", message: `Gagal membuat user. Username mungkin sudah terpakai.` };
     }
 }
 
 function deleteSsh(username) {
     if (!username || !/^[a-zA-Z0-9_-]+$/.test(username)) return { status: "error", message: "Username ilegal!" };
     try {
-        try { execSync(`userdel -r ${username} 2>/dev/null`); } catch(e) {}
+        execSync(`userdel -r ${username}`);
         const dbInfo = loadDb();
         if (dbInfo[username]) {
             delete dbInfo[username];
@@ -267,6 +276,7 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
+// ⚡ MODIFIKASI FITUR BARU: GENERATE CONFIG VMESS DENGAN PENGATURAN DNS & NETWORK MODE DYNAMIC
 async function generateConfig() {
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
   const vmessPaths = readPathsFromFile('pathvmess.txt', '/vmess-argo');
@@ -276,7 +286,7 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
-  const netType = getXrayNetworkMode();
+  const netType = getXrayNetworkMode(); // Pilihan: 'ws' atau 'grpc'
 
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
@@ -304,6 +314,7 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
+  // Dynamic DNS: Fast UDP vs Secure DoH
   const dnsServers = getXrayDnsMode() === 'udp' ? ["8.8.8.8", "1.1.1.1"] : ["https+local://8.8.8.8/dns-query"];
 
   const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: dnsServers }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
@@ -452,6 +463,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Perintah restart tunnel terkirim! Tunggu 10 detik..." }));
     }
 
+    // 🌐 API HANDLER UNTUK SET CFIP MANUAL
     if (pathName === '/api/set-cfip') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -468,6 +480,7 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
+    // ⚡ FITUR BARU: API SET DNS & NETWORK VMESS/XRAY
     if (pathName === '/api/set-xray') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -484,7 +497,7 @@ const server = http.createServer(async (req, res) => {
 
         if (currentActiveDomain) generateLinks(currentActiveDomain);
 
-        return res.end(JSON.stringify({ status: "success", message: "Pengaturan DNS & Network X-Ray Berhasil Diperbarui!" }));
+        return res.end(JSON.stringify({ status: "success", message: "Pengaturan DNS & Network VMess Berhasil Diperbarui!" }));
     }
 
     if (pathName === '/api/add') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(addSsh(query.user, query.pass, ipAddr, userAgent))); }
@@ -621,6 +634,7 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
+                <!-- 🔒 MENU ADMIN KONTROL TUNNEL, CFIP, & DNS VMESS -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ PENGATURAN TOKEN & IP CLEAN</span>
@@ -632,6 +646,7 @@ const server = http.createServer(async (req, res) => {
                         <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
                     </div>
 
+                    <!-- ⚡ FITUR BARU: PILIH DNS RESOLVER & TRANSPORT PROTOCOL VMESS/XRAY -->
                     <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #334155;">
                         <div style="font-size: 11px; color: #38bdf8; font-weight: bold; margin-bottom: 6px;">🌐 MODES DNS & NETWORK VMESS/X-RAY:</div>
                         <div style="display: flex; gap: 6px; margin-bottom: 6px;">
@@ -670,6 +685,7 @@ const server = http.createServer(async (req, res) => {
                     </table>
                 </div>
 
+                <!-- DOMAIN TUNNEL SSH (DARI INGRESS RULE PORT 8880) -->
                 <div class="url-section" style="border-color: #a855f7;">
                     <div class="url-title" style="color: #d8b4fe;">Server ssh aktif (zero trust domain)</div>
                     <div id="zt-container">
@@ -678,6 +694,7 @@ const server = http.createServer(async (req, res) => {
                     <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                 </div>
 
+                <!-- DOMAIN TUNNEL VMESS (DARI INGRESS RULE PORT 8001) -->
                 <div class="url-section" style="border-color: #0284c7;">
                     <div class="url-title" style="color: #38bdf8;">Server Zero trust (Vmess/Vless/X-Ray Domain)</div>
                     <div id="zt-vmess-container">
@@ -853,6 +870,7 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
+                // ⚡ FUNGSI CLIENT-SIDE SAVE DNS & NETWORK X-RAY
                 async function saveXraySettings() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
