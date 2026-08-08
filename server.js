@@ -566,7 +566,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
-    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW)
+    // 🛠️ FIX RESTART REAL-TIME BADVPN UDPGW & BANNER DROPBEAR
     if (pathName === '/api/set-system') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -580,15 +580,25 @@ const server = http.createServer(async (req, res) => {
 
         saveSystemSettings(banner, enable_bbr, udpgw_port, udpgw_max_clients);
 
-        // Update Banner Dropbear Instan secara Real-Time
-        if (banner) {
-            try {
+        // 1. Tulis Banner ke /etc/dropbear_banner & /tmp/dropbear_banner
+        try {
+            if (banner) {
                 fs.writeFileSync('/etc/dropbear_banner', banner);
+                fs.writeFileSync('/tmp/dropbear_banner', banner);
                 exec("pkill dropbear && /usr/sbin/dropbear -p 127.0.0.1:22 -b /etc/dropbear_banner -W 1048576 -K 15 -I 300");
-            } catch(e) {}
-        }
+            }
+        } catch(e) {}
 
-        // Apply BBR Switch secara Real-Time ke Sysctl Kernel
+        // 2. Restart BadVPN UDPGW dengan Port Baru secara Instan!
+        try {
+            exec("pkill -9 badvpn-udpgw", () => {
+                setTimeout(() => {
+                    exec(`/usr/local/bin/badvpn-udpgw --listen-addr 0.0.0.0:${udpgw_port} --max-clients ${udpgw_max_clients} --max-connections-for-client 50 &`);
+                }, 500);
+            });
+        } catch(e) {}
+
+        // 3. Switch BBR / Cubic Kernel
         try {
             if (enable_bbr === "true") {
                 exec("sysctl -w net.ipv4.tcp_congestion_control=bbr 2>/dev/null");
@@ -597,7 +607,7 @@ const server = http.createServer(async (req, res) => {
             }
         } catch(e) {}
 
-        return res.end(JSON.stringify({ status: "success", message: "System Config (Banner/BBR/UDPGW) Berhasil Disimpan & Di-apply!" }));
+        return res.end(JSON.stringify({ status: "success", message: `Sistem Diperbarui! BadVPN Aktif di Port: ${udpgw_port}, BBR: ${enable_bbr.toUpperCase()}` }));
     }
 
     if (pathName === '/api/set-token') {
@@ -1121,6 +1131,7 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
+                // FIX PENANGANAN API TERPISAH SUPAYA JIKA KETUAR ERROR LANGSUNG MUNCUL DETAILNYA
                 async function saveWsProxySettingUI() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -1145,16 +1156,22 @@ const server = http.createServer(async (req, res) => {
                     if (!keep) keep = "15000";
                     if (!buf) buf = "32768";
 
+                    let results = [];
+
                     try {
                         let res1 = await fetch('/api/set-wsproxy?pass=' + encodeURIComponent(adminToken) + '&ssh_port=' + port + '&keep_alive=' + keep + '&max_buffer=' + buf);
                         let data1 = await res1.json();
+                        results.push(data1.message);
+                    } catch(e) { results.push("Gagal simpan WS-Proxy"); }
 
+                    try {
                         let res2 = await fetch('/api/set-system?pass=' + encodeURIComponent(adminToken) + '&banner=' + encodeURIComponent(banner) + '&enable_bbr=' + bbr + '&udpgw_port=' + udpgw);
                         let data2 = await res2.json();
+                        results.push(data2.message);
+                    } catch(e) { results.push("Gagal simpan System (Banner/BBR/UDPGW)"); }
 
-                        alert(data1.message + "\\n" + data2.message);
-                        updateStats();
-                    } catch(e) { alert("Gagal memperbarui SSH Config!"); }
+                    alert(results.join("\n\n"));
+                    updateStats();
                 }
 
                 async function promptSingleTokenInput() {
