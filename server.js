@@ -21,11 +21,8 @@ const FILE_PATH = process.env.FILE_PATH || '.tmp';
 const SUB_PATH = process.env.SUB_PATH || 'sub';       
 
 const PORT = process.env.PORT || 8081; 
-
 const UUID = process.env.UUID || '1f37ac4f-fdd0-49df-9406-1eda70a1d512'; 
-
 const ARGO_PORT = 8001;            
-
 const CFPORT = process.env.CFPORT || 443;                  
 const NAME = process.env.NAME || 'ddfathu';                        
 
@@ -33,7 +30,6 @@ const LOG_PATH = path.join(FILE_PATH, "boot.log");
 const ZT_LOG_PATH = "/tmp/named_tunnel.log";
 const ZT_SINGLE_TOKEN_FILE = "/tmp/zt_single_token.txt";
 
-// FILE PERSISTENSI KONFIGURASI X-RAY & CFIP
 const CFIP_FILE = "/tmp/cfip.txt";
 const XRAY_DNS_FILE = "/tmp/xray_dns.txt";
 const XRAY_NET_FILE = "/tmp/xray_net.txt";
@@ -47,12 +43,9 @@ let cachedSshOnline = "0 User";
 let cachedUserListDetails = "Semua user offline";
 
 if (!fs.existsSync(FILE_PATH)) {
-  fs.mkdirSync(FILE_PATH);
+  fs.mkdirSync(FILE_PATH, { recursive: true });
 }
 
-// ========================================================
-// FUNGSI GETTER & SETTER CONFIG X-RAY DYNAMIC
-// ========================================================
 function getActiveCfip() {
     try {
         if (fs.existsSync(CFIP_FILE)) {
@@ -274,7 +267,6 @@ function deleteSsh(username) {
 
 function readPathsFromFile(filename, defaultPath) { try { if (fs.existsSync(filename)) { const content = fs.readFileSync(filename, 'utf-8'); const paths = content.split('\n').map(p => p.trim()).filter(p => p.startsWith('/')); if (paths.length > 0) return paths; } } catch (e) {} return [defaultPath]; }
 
-// ⚡ DYNAMIC X-RAY CONFIG GENERATOR DENGAN FITUR PILIH DNS & NETWORK
 async function generateConfig() {
   const vlessPaths = readPathsFromFile('pathvless.txt', '/vless-argo');
   const vmessPaths = readPathsFromFile('pathvmess.txt', '/vmess-argo');
@@ -284,7 +276,7 @@ async function generateConfig() {
   const inboundsList = [];
   let nextPort = 3100;
 
-  const netType = getXrayNetworkMode(); // Pilihan: 'ws' atau 'grpc'
+  const netType = getXrayNetworkMode();
 
   vlessPaths.forEach(p => { 
     const cp = nextPort++; 
@@ -312,7 +304,6 @@ async function generateConfig() {
     sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] }
   });
 
-  // Pilihan DNS: Fast UDP (8.8.8.8) vs Secure DoH (https+local)
   const dnsServers = getXrayDnsMode() === 'udp' ? ["8.8.8.8", "1.1.1.1"] : ["https+local://8.8.8.8/dns-query"];
 
   const config = { log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' }, inbounds: inboundsList, dns: { servers: dnsServers }, outbounds: [{ protocol: "freedom", tag: "direct" }] };
@@ -477,7 +468,6 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-    // ⚡ API HANDLER KHUSUS FITUR UBAH DNS & NETWORK MODE X-RAY/VMESS
     if (pathName === '/api/set-xray') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -631,7 +621,6 @@ const server = http.createServer(async (req, res) => {
                     <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
                 </div>
 
-                <!-- 🔒 MENU ADMIN KONTROL TUNNEL, CFIP, & DNS VMESS -->
                 <div class="zt-admin-card" id="zt-admin-box">
                     <div style="font-size: 12px; font-weight: bold; color: #d8b4fe; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                         <span>⚙️ PENGATURAN TOKEN & IP CLEAN</span>
@@ -643,7 +632,6 @@ const server = http.createServer(async (req, res) => {
                         <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 SET CLOUDFLARE CLEAN IP (CFIP)</button>
                     </div>
 
-                    <!-- ⚡ FITUR BARU: PILIH DNS RESOLVER & TRANSPORT PROTOCOL VMESS/XRAY -->
                     <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #334155;">
                         <div style="font-size: 11px; color: #38bdf8; font-weight: bold; margin-bottom: 6px;">🌐 MODES DNS & NETWORK VMESS/X-RAY:</div>
                         <div style="display: flex; gap: 6px; margin-bottom: 6px;">
@@ -656,7 +644,7 @@ const server = http.createServer(async (req, res) => {
                                 <option value="grpc">⚡ gRPC Engine</option>
                             </select>
                         </div>
-                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; padding: 6px; font-size: 11px;" onclick="saveXraySettings()">💾 SIMPAN STTINGAN DNS & NETWORK</button>
+                        <button class="btn-token-trigger" style="background: #0284c7; color: #fff; padding: 6px; font-size: 11px;" onclick="saveXraySettings()">💾 SIMPAN SETTINGAN DNS & NETWORK</button>
                     </div>
 
                     <div style="margin-top: 8px; font-size: 11px; color: #4ade80; text-align: center; font-weight: bold;">
@@ -783,7 +771,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function handleAdminAuthBtn() {
                     if(!isPassConfigured) {
-                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\\nMasukkan Password Admin Baru:");
+                        let newP = prompt("KREASI PASSWORD ADMIN PERTAMA KALI:\nMasukkan Password Admin Baru:");
                         if(!newP) return false;
                         try {
                             let res = await fetch('/api/setup-pass?pass=' + encodeURIComponent(newP));
@@ -830,7 +818,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\n\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     
                     if (inputToken === null) return;
 
@@ -851,7 +839,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\nContoh: 104.17.3.81\n\n(Kosongkan lalu klik OK untuk reset ke default)");
                     
                     if (inputIp === null) return;
 
@@ -865,7 +853,6 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                // ⚡ FUNGSI CLIENT-SIDE SAVE DNS & NETWORK X-RAY
                 async function saveXraySettings() {
                     if (!adminToken) {
                         alert("Akses Ditolak! Anda harus Login Admin terlebih dahulu.");
@@ -888,7 +875,7 @@ const server = http.createServer(async (req, res) => {
 
                 async function changeAdminPassUI() {
                     if(!adminToken) return;
-                    let newP = prompt("GANTI PASSWORD ADMIN:\\nMasukkan Password Admin Baru:");
+                    let newP = prompt("GANTI PASSWORD ADMIN:\nMasukkan Password Admin Baru:");
                     if(!newP) return;
                     try {
                         let res = await fetch('/api/setup-pass?old_pass=' + encodeURIComponent(adminToken) + '&pass=' + encodeURIComponent(newP));
@@ -970,13 +957,13 @@ const server = http.createServer(async (req, res) => {
                         if(data.status === "success" && data.users.length > 0) {
                             savedUsersData = data.users; 
                             data.users.forEach(u => {
-                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\\''+u.username+'\\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\\''+u.username+'\\')">HAPUS</button></div></td></tr>';
+                                tbody.innerHTML += '<tr><td style="font-weight:bold; color:#f1f5f9;">👤 '+u.username+'</td><td style="color:#64748b;">'+u.shell+'</td><td style="text-align: right;"><div class="btn-action-group"><button class="btn-info" onclick="showAccountDetails(\''+u.username+'\')">👁️ INFO</button><button class="btn-del" onclick="deleteAccount(\''+u.username+'\')">HAPUS</button></div></td></tr>';
                             });
                             checkAdminUI();
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\n===============================\n👤 Username   : " + userObj.username + "\n🔑 Password   : " + userObj.password + "\n🌐 IP Address : " + userObj.ip + "\n📱 User-Agent : " + userObj.user_agent); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
                     if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
