@@ -1474,7 +1474,7 @@ const server = http.createServer(async (req, res) => {
                   alert('Config Berhasil Disalin!');
                 }
 
-                setInterval(updateStats, 5000); 
+                setInterval(updateStats, 300000); 
                 updateStats(); 
                 fetchAccounts();
                 fetchServerInfo();
