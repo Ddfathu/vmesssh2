@@ -532,7 +532,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: "Password Admin Berhasil Disimpan/Diubah!" }));
     }
 
-    // 🔑 API ENDPOINT SET NETWORK & CUSTOM DNS
     if (pathName === '/api/set-network') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -554,7 +553,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting V2Ray Disimpan! DNS: [${dns_type.toUpperCase()}] ${custom_dns}, Engine: ${engine.toUpperCase()}. Engine restarted!` }));
     }
 
-    // ⚡ API ENDPOINT SET WS-PROXY SSH CONTROLLER
     if (pathName === '/api/set-wsproxy') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -565,7 +563,6 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ status: "success", message: `Setting SSH Disimpan! Target Port: ${query.ssh_port || 22}, KeepAlive: ${query.keep_alive || 15000}ms` }));
     }
 
-    // 🛠️ API ENDPOINT SET SYSTEM CONFIG (BANNER, BBR, UDPGW)
     if (pathName === '/api/set-system') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (!verifyAdminPassword(query.pass)) {
@@ -731,11 +728,11 @@ const server = http.createServer(async (req, res) => {
                 body { font-family: '-apple-system', BlinkMacSystemFont, sans-serif; background: #000000; color: #f8fafc; min-height: 100vh; padding: 0; margin: 0; }
                 
                 /* NAVBAR TERATAS */
-                .navbar { background: #090d16; border-bottom: 1px solid #1f2937; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-                .nav-left { display: flex; align-items: center; gap: 15px; }
-                .hamburger-btn { background: none; border: none; color: #38bdf8; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; transition: 0.2s; }
+                .navbar { background: #090d16; border-bottom: 1px solid #1f2937; padding: 10px 15px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+                .nav-left { display: flex; align-items: center; gap: 12px; }
+                .hamburger-btn { background: none; border: none; color: #38bdf8; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; }
                 .hamburger-btn:hover { background: #111827; }
-                .nav-title { font-size: 16px; font-weight: bold; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; }
+                .nav-title { font-size: 14px; font-weight: bold; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; }
                 
                 /* SIDEBAR NAVIGASI GARIS TIGA */
                 .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(3px); z-index: 998; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
@@ -750,65 +747,77 @@ const server = http.createServer(async (req, res) => {
                 .sidebar-menu { list-style: none; padding: 15px 0; margin: 0; flex: 1; overflow-y: auto; }
                 .menu-item { padding: 12px 20px; display: flex; align-items: center; gap: 12px; color: #94a3b8; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; border-left: 3px solid transparent; }
                 .menu-item:hover, .menu-item.active { background: #0e1726; color: #38bdf8; border-left-color: #38bdf8; }
-                .menu-item i { font-style: normal; font-size: 16px; }
 
                 /* LAYOUT UTAMA CONTAINER */
-                .main-wrapper { display: flex; justify-content: center; padding: 20px 15px; }
-                .container { background: #000000; width: 100%; max-width: 500px; }
+                .main-wrapper { display: flex; justify-content: center; padding: 15px 12px; }
+                .container { background: #000000; width: 100%; max-width: 480px; }
                 
-                /* DASHBOARD PAGE STYLING */
+                /* PAGE SECTIONS */
                 .page-section { display: none; }
                 .page-section.active { display: block; }
 
-                .dev-tag { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: bold; text-align: center; }
-                .btn-login-trigger { background: #111827; color: #f8fafc; border: 1px solid #1f2937; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: bold; }
+                .dev-tag { font-size: 10px; color: #64748b; margin-top: 2px; font-weight: bold; text-align: center; }
+                .btn-login-trigger { background: #111827; color: #f8fafc; border: 1px solid #1f2937; padding: 5px 10px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: bold; }
                 
-                .status-container { text-align: center; margin-bottom: 15px; }
-                .status-badge { display: inline-block; background: #0a0a0a; padding: 5px 12px; border-radius: 50px; font-size: 11px; font-weight: bold; border: 1px solid #1f2937; }
-                .status-dot { height: 8px; width: 8px; background-color: #4ade80; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 8px #4ade80; }
+                .status-container { text-align: center; margin-bottom: 12px; }
+                .status-badge { display: inline-block; background: #0a0a0a; padding: 4px 10px; border-radius: 50px; font-size: 10px; font-weight: bold; border: 1px solid #1f2937; }
+                .status-dot { height: 7px; width: 7px; background-color: #4ade80; border-radius: 50%; display: inline-block; margin-right: 5px; box-shadow: 0 0 6px #4ade80; }
                 
-                .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-                .stat-card { background: #0a0a0a; padding: 12px; border-radius: 8px; border: 1px solid #1f2937; text-align: left; }
-                .stat-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
-                .stat-value { font-size: 14px; font-weight: bold; color: #f1f5f9; margin-top: 4px; }
+                /* STATS GRID MINIMALIS */
+                .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+                .stat-card { background: #0a0a0a; padding: 8px 10px; border-radius: 6px; border: 1px solid #1f2937; text-align: left; }
+                .stat-title { font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: bold; }
+                .stat-value { font-size: 12px; font-weight: bold; color: #f1f5f9; margin-top: 2px; }
                 
-                .ssh-manager { background: #0a0a0a; padding: 15px; border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 20px; position: relative;}
-                .ssh-title { font-size: 13px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-                .input-group { display: flex; gap: 8px; margin-bottom: 10px; }
-                .input-ssh { background: #000000; border: 1px solid #1f2937; padding: 8px 12px; border-radius: 6px; color: #fff; font-size: 13px; width: 100%; outline: none; }
+                .ssh-manager { background: #0a0a0a; padding: 12px; border-radius: 10px; border: 1px solid #1f2937; margin-bottom: 15px; }
+                .ssh-title { font-size: 12px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+                .input-group { display: flex; gap: 6px; margin-bottom: 8px; }
+                .input-ssh { background: #000000; border: 1px solid #1f2937; padding: 6px 10px; border-radius: 6px; color: #fff; font-size: 12px; width: 100%; outline: none; }
                 .input-ssh:focus { border-color: #38bdf8; }
                 
-                .select-zt { background: #000000; border: 1px solid #a855f7; padding: 8px 12px; border-radius: 6px; color: #38bdf8; font-size: 13px; width: 100%; font-weight: bold; font-family: monospace; outline: none; margin: 6px 0; }
-                .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
-                .admin-status-lbl { font-size: 10px; font-weight: bold; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px; }
-                .result-box { display: none; background: #000000; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 15px; overflow-x: hidden; }
-                .btn-copy-result { display: none; background: #4ade80; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; margin-bottom: 15px; }
-                .ssh-list { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-                .ssh-list th { text-align: left; padding: 6px; color: #94a3b8; border-bottom: 1px solid #1f2937; }
-                .ssh-list td { padding: 6px; border-bottom: 1px solid #111827; vertical-align: middle; }
+                .btn-add { background: #38bdf8; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; }
+                .admin-status-lbl { font-size: 9px; font-weight: bold; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 5px; border-radius: 4px; }
+                .result-box { display: none; background: #000000; border: 1px solid #4ade80; border-radius: 6px; padding: 8px; font-family: monospace; font-size: 11px; color: #4ade80; white-wrap: pre-wrap; margin-bottom: 10px; overflow-x: hidden; }
+                .btn-copy-result { display: none; background: #4ade80; color: #090d16; border: none; padding: 5px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 10px; width: 100%; margin-bottom: 10px; }
+                .ssh-list { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+                .ssh-list th { text-align: left; padding: 4px; color: #94a3b8; border-bottom: 1px solid #1f2937; }
+                .ssh-list td { padding: 4px; border-bottom: 1px solid #111827; vertical-align: middle; }
                 .btn-action-group { display: flex; gap: 4px; justify-content: flex-end; }
-                .btn-del { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; display: none; }
-                .btn-info { background: #eab308; color: #090d16; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; display: none; }
+                .btn-del { background: #ef4444; color: white; border: none; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; display: none; }
+                .btn-info { background: #eab308; color: #090d16; border: none; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; display: none; }
                 
-                .url-section { background: #000000; border: 1px solid #38bdf8; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
-                .url-section th { font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
-                .url-box { font-family: monospace; font-size: 13px; word-break: break-all; color: #38bdf8; font-weight: bold; margin: 6px 0; }
-                .btn-copy { background: #38bdf8; color: #090d16; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; width: 100%; }
-                .note { font-size: 11px; color: #64748b; text-align: center; line-height: 1.4; margin-top: 10px; }
+                /* ========================================== */
+                /* UI DOMAIN SERVER MINIMALIS & RINGKAS */
+                /* ========================================== */
+                .url-section { background: #050811; border: 1px solid #1f2937; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; }
+                .url-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+                .url-title { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
+                
+                .url-content-row { display: flex; align-items: center; gap: 8px; background: #000000; border: 1px solid #111827; padding: 4px 8px; border-radius: 6px; }
+                .url-box { font-family: monospace; font-size: 11px; word-break: break-all; font-weight: bold; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                
+                /* TOMBOL COPY KECIL SIMPEL */
+                .btn-copy-mini { background: #1e293b; color: #38bdf8; border: 1px solid #334155; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; white-space: nowrap; transition: 0.2s; }
+                .btn-copy-mini:hover { background: #38bdf8; color: #000; border-color: #38bdf8; }
 
-                .card-blue { background-color: #050a14; border: 1px solid #1e293b; padding: 15px; border-radius: 12px; margin-top: 15px; text-align: left; }
-                .btn-blue { background-color: #0f172a; border: 1px solid #1e293b; color: #93c5fd; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
+                .select-zt-mini { background: #000000; border: none; color: #38bdf8; font-size: 11px; font-weight: bold; font-family: monospace; outline: none; width: 100%; cursor: pointer; }
+
+                /* TOMBOL BESAR INPUT TOKEN */
+                .btn-token-trigger { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; border: none; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+
+                .card-blue { background-color: #050a14; border: 1px solid #1e293b; padding: 12px; border-radius: 10px; margin-top: 10px; text-align: left; }
+                .btn-blue { background-color: #0f172a; border: 1px solid #1e293b; color: #93c5fd; padding: 6px; border-radius: 6px; font-size: 10px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; font-family: monospace; }
                 .btn-blue:hover { border-color: #3b82f6; color: #fff; background-color: #1e293b; }
                 .btn-active { border-color: #60a5fa !important; color: #fff !important; background-color: #1d4ed8 !important; }
-                .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
-                .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-                .lbl-vpn { font-size: 10px; color: #38bdf8; font-weight: bold; display: block; margin-bottom: 4px; text-transform: uppercase; }
-                .border-lbl { border-left: 2px solid #38bdf8; padding-left: 6px; font-size: 11px; font-weight: bold; margin-top: 12px; font-family: monospace; }
+                .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
+                .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+                .lbl-vpn { font-size: 9px; color: #38bdf8; font-weight: bold; display: block; margin-bottom: 3px; text-transform: uppercase; }
+                .border-lbl { border-left: 2px solid #38bdf8; padding-left: 6px; font-size: 10px; font-weight: bold; margin-top: 10px; font-family: monospace; }
 
-                .zt-admin-card { background: #000000; border: 1px solid #8b5cf6; padding: 16px; border-radius: 12px; margin-bottom: 18px; box-shadow: 0 0 15px rgba(139, 92, 246, 0.15); }
-                .sub-box { background: #05050a; border: 1px solid #1f1938; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
-                .sub-box-title { font-size: 12px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
-                .btn-token-trigger { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; border: none; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+                .zt-admin-card { background: #000000; border: 1px solid #8b5cf6; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
+                .sub-box { background: #05050a; border: 1px solid #1f1938; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+                .sub-box-title { font-size: 11px; font-weight: bold; color: #38bdf8; margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+                .note { font-size: 10px; color: #64748b; text-align: center; line-height: 1.4; margin-top: 10px; }
             </style>
         </head>
         <body>
@@ -829,12 +838,12 @@ const server = http.createServer(async (req, res) => {
                     <button class="close-sidebar" onclick="toggleSidebar()">✕</button>
                 </div>
                 <ul class="sidebar-menu">
-                    <li class="menu-item active" onclick="switchPage('page-dashboard')"><i>🏠</i> Dashboard Utama</li>
-                    <li class="menu-item" onclick="switchPage('page-buat-ssh')"><i>➕</i> Buat Akun SSH</li>
-                    <li class="menu-item" onclick="switchPage('page-set-ssh')"><i>🔌</i> Pengaturan SSH</li>
-                    <li class="menu-item" onclick="switchPage('page-set-v2ray')"><i>⚙️</i> Pengaturan V2Ray / VMess</li>
-                    <li class="menu-item" onclick="switchPage('page-set-cfip')"><i>🚀</i> Pengaturan CFIP</li>
-                    <li class="menu-item" onclick="switchPage('page-generator')"><i>⚡</i> Config Generator</li>
+                    <li class="menu-item active" onclick="switchPage('page-dashboard')">🏠 Dashboard Utama</li>
+                    <li class="menu-item" onclick="switchPage('page-buat-ssh')">➕ Buat Akun SSH</li>
+                    <li class="menu-item" onclick="switchPage('page-set-ssh')">🔌 Pengaturan SSH</li>
+                    <li class="menu-item" onclick="switchPage('page-set-v2ray')">⚙️ Pengaturan V2Ray / VMess</li>
+                    <li class="menu-item" onclick="switchPage('page-set-cfip')">🚀 Pengaturan CFIP</li>
+                    <li class="menu-item" onclick="switchPage('page-generator')">⚡ Config Generator</li>
                 </ul>
                 <div style="padding: 15px 20px; border-top: 1px solid #1f2937;">
                     <span id="btn-change-pass" onclick="changeAdminPassUI()" style="color: #eab308; cursor: pointer; font-size: 11px; text-decoration: underline; display: none;">🔑 GANTI PASS ADMIN</span>
@@ -848,8 +857,8 @@ const server = http.createServer(async (req, res) => {
                     <!-- 🏠 HALAMAN 1: DASHBOARD UTAMA -->
                     <!-- ========================================== -->
                     <div id="page-dashboard" class="page-section active">
-                        <div style="text-align:center; margin-bottom: 15px;">
-                            <h1 style="font-size:18px; color:#38bdf8; text-transform:uppercase;">👑 DASHBOARD SERVER 👑</h1>
+                        <div style="text-align:center; margin-bottom: 10px;">
+                            <h1 style="font-size:16px; color:#38bdf8; text-transform:uppercase;">👑 DASHBOARD SERVER 👑</h1>
                             <div class="dev-tag">DYNAMIC TRIPLE-TUNNEL NODE CORE ACTIVE</div>
                         </div>
 
@@ -857,60 +866,63 @@ const server = http.createServer(async (req, res) => {
                         
                         <!-- INFO STATS SERVER HALAMAN DEPAN -->
                         <div class="stats-grid">
-                            <div class="stat-card" style="grid-column: span 2;"><div class="stat-title">CPU Model</div><div class="stat-value" id="cpu" style="font-size:12px; color:#38bdf8;">Loading...</div></div>
+                            <div class="stat-card" style="grid-column: span 2;"><div class="stat-title">CPU Model</div><div class="stat-value" id="cpu" style="font-size:11px; color:#38bdf8;">Loading...</div></div>
                             <div class="stat-card"><div class="stat-title">RAM Used / Total</div><div class="stat-value" id="ram">Loading...</div></div>
                             <div class="stat-card"><div class="stat-title">Disk Usage (/)</div><div class="stat-value" id="disk">Loading...</div></div>
-                            <div class="stat-card"><div class="stat-title">Server Uptime</div><div class="stat-value" id="uptime" style="font-size:12px;">Loading...</div></div>
-                            <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online Users</div><div class="stat-value" id="ssh" style="font-size:14px; color:#a855f7; line-height:1.3;">👥 0 Users</div></div>
+                            <div class="stat-card"><div class="stat-title">Server Uptime</div><div class="stat-value" id="uptime" style="font-size:11px;">Loading...</div></div>
+                            <div class="stat-card" style="border-color: #a855f7;"><div class="stat-title" style="color:#d8b4fe;">SSH Online</div><div class="stat-value" id="ssh" style="font-size:12px; color:#a855f7; line-height:1.2;">👥 0 Users</div></div>
                         </div>
 
-                        <!-- TOMBOL BESAR MASUKKAN TOKEN ARGO -->
-                        <div style="margin-bottom: 15px;">
-                            <button class="btn-token-trigger" style="background: linear-gradient(135deg, #a855f7, #6b21a8); color: #fff; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN ARGO TUNNEL</button>
+                        <!-- TOMBOL BESAR MASUKKAN TOKEN ARGO (UTAMA) -->
+                        <div style="margin-bottom: 12px;">
+                            <button class="btn-token-trigger" style="background: linear-gradient(135deg, #a855f7, #6b21a8); color: #fff; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);" onclick="promptSingleTokenInput()">🌐 MASUKKAN TOKEN ARGO TUNNEL</button>
                         </div>
 
                         <!-- INFO SETTINGAN SERVER SAAT INI -->
-                        <div class="sub-box" style="border-color: #10b981; margin-bottom: 18px;">
-                            <div class="sub-box-title" style="color:#10b981; text-align:center; display:block;">📋 INFO PENGATURAN SERVER DILAPANGAN</div>
-                            <div style="font-size: 11px; color: #4ade80; text-align: center; font-weight: bold; line-height: 1.6;">
-                                <span>CFIP AKTIF: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span><br>
-                                <span>DNS MODE: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span> | 
+                        <div class="sub-box" style="border-color: #10b981; margin-bottom: 12px;">
+                            <div class="sub-box-title" style="color:#10b981; text-align:center; display:block;">📋 INFO PENGATURAN SERVER</div>
+                            <div style="font-size: 10px; color: #4ade80; text-align: center; font-weight: bold; line-height: 1.5;">
+                                <span>CFIP: </span><span id="display-cfip" style="color:#fff; font-family:monospace;">Loading...</span> | 
+                                <span>DNS: </span><span id="display-dns" style="color:#eab308; font-family:monospace;">UDP</span> | 
                                 <span>ENGINE: </span><span id="display-engine" style="color:#38bdf8; font-family:monospace;">WS</span><br>
-                                <span>SSH TARGET PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span> | 
+                                <span>PORT: </span><span id="display-ws-port" style="color:#d8b4fe; font-family:monospace;">22</span> | 
                                 <span>KEEPALIVE: </span><span id="display-ws-keep" style="color:#38bdf8; font-family:monospace;">15000ms</span> | 
-                                <span>MAX BUFFER: </span><span id="display-ws-buf" style="color:#eab308; font-family:monospace;">32768 Bytes</span><br>
-                                <span>TCP BBR: </span><span id="display-bbr" style="color:#10b981; font-family:monospace;">ON</span> | 
-                                <span>UDPGW PORT: </span><span id="display-udpgw" style="color:#f43f5e; font-family:monospace;">7300</span>
+                                <span>BBR: </span><span id="display-bbr" style="color:#10b981; font-family:monospace;">ON</span> | 
+                                <span>UDPGW: </span><span id="display-udpgw" style="color:#f43f5e; font-family:monospace;">7300</span>
                             </div>
                         </div>
 
-                        <!-- LIST DOMAIN TUNNEL AKTIF -->
+                        <!-- LIST DOMAIN TUNNEL AKTIF (UI MINIMALIS) -->
                         <div class="url-section" style="border-color: #a855f7;">
-                            <div class="url-title" style="color: #d8b4fe;">SERVER SSH AKTIF (ZERO TRUST DOMAIN)</div>
-                            <div id="zt-container">
-                                <div class="url-box" id="named-url">Menghubungkan Domain...</div>
+                            <div class="url-header"><span class="url-title" style="color: #d8b4fe;">SSH WS Domain</span></div>
+                            <div class="url-content-row">
+                                <div id="zt-container" style="flex:1; overflow:hidden;"><div class="url-box" id="named-url" style="color:#d8b4fe;">Menghubungkan...</div></div>
+                                <button class="btn-copy-mini" id="btn-copy-named" onclick="copyTxt('named-url', 'btn-copy-named')">📋 Copy</button>
                             </div>
-                            <button class="btn-copy" id="btn-copy-named" style="background:#a855f7; color:#fff;" onclick="copyTxt('named-url', 'btn-copy-named')">📋 COPY SSH SERVER</button>
                         </div>
 
                         <div class="url-section" style="border-color: #0284c7;">
-                            <div class="url-title" style="color: #38bdf8;">SERVER ZERO TRUST (VMESS/VLESS/X-RAY DOMAIN)</div>
-                            <div id="zt-vmess-container">
-                                <div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>
+                            <div class="url-header"><span class="url-title" style="color: #38bdf8;">VMess / VLess Domain</span></div>
+                            <div class="url-content-row">
+                                <div id="zt-vmess-container" style="flex:1; overflow:hidden;"><div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan...</div></div>
+                                <button class="btn-copy-mini" id="btn-copy-vmess-named" onclick="copyTxt('vmess-named-url', 'btn-copy-vmess-named')">📋 Copy</button>
                             </div>
-                            <button class="btn-copy" id="btn-copy-vmess-named" style="background:#0284c7; color:#fff;" onclick="copyTxt('vmess-named-url', 'btn-copy-vmess-named')">📋 COPY VMESS DOMAIN</button>
                         </div>
 
                         <div class="url-section" style="border-color: #f43f5e;">
-                            <div class="url-title" style="color: #fb7185;">SERVER SNI/STUNNEL SNI MURNI</div>
-                            <div class="url-box" id="railway-url" style="color: #f43f5e;">Loading...</div>
-                            <button class="btn-copy" id="btn-copy-railway" style="background:#f43f5e; color:#fff;" onclick="copyTxt('railway-url', 'btn-copy-railway')">📋 COPY SERVER SSH SNI</button>
+                            <div class="url-header"><span class="url-title" style="color: #fb7185;">SSH SNI Server</span></div>
+                            <div class="url-content-row">
+                                <div class="url-box" id="railway-url" style="color: #f43f5e;">Loading...</div>
+                                <button class="btn-copy-mini" id="btn-copy-railway" onclick="copyTxt('railway-url', 'btn-copy-railway')">📋 Copy</button>
+                            </div>
                         </div>
 
-                        <div class="url-section">
-                            <div class="url-title">QUICK TUNNEL URL (VMESS/VLESS/TROJAN SUB)</div>
-                            <div class="url-box" id="quick-url">Loading...</div>
-                            <button class="btn-copy" id="btn-copy-quick" onclick="copyTxt('quick-url', 'btn-copy-quick')">📋 COPY SUB DOMAIN</button>
+                        <div class="url-section" style="border-color: #38bdf8;">
+                            <div class="url-header"><span class="url-title" style="color: #38bdf8;">Quick Tunnel Sub</span></div>
+                            <div class="url-content-row">
+                                <div class="url-box" id="quick-url" style="color: #38bdf8;">Loading...</div>
+                                <button class="btn-copy-mini" id="btn-copy-quick" onclick="copyTxt('quick-url', 'btn-copy-quick')">📋 Copy</button>
+                            </div>
                         </div>
                     </div>
 
@@ -929,7 +941,7 @@ const server = http.createServer(async (req, res) => {
                             <button id="btn-copy-acc" class="btn-copy-result" onclick="copyAccountText()">📋 COPY DETAIL AKUN</button>
                             <div id="ssh-msg" style="font-size: 11px; margin-top: 5px; font-weight: bold;"></div>
                             
-                            <div class="ssh-title" style="margin-top: 20px; border-top: 1px solid #1f2937; padding-top: 15px;">📋 DAFTAR AKUN TERDAFTAR</div>
+                            <div class="ssh-title" style="margin-top: 15px; border-top: 1px solid #1f2937; padding-top: 10px;">📋 DAFTAR AKUN TERDAFTAR</div>
                             <table class="ssh-list">
                                 <thead><tr><th>Username</th><th>Shell Path</th><th style="text-align: right;">Aksi</th></tr></thead>
                                 <tbody id="ssh-table-body"><tr><td colspan="3" style="text-align:center; color:#64748b;">Loading accounts...</td></tr></tbody>
@@ -954,17 +966,17 @@ const server = http.createServer(async (req, res) => {
                                             <option value="447">Port 447 (SSL Stunnel)</option>
                                             <option value="custom">✏️ Custom...</option>
                                         </select>
-                                        <input type="number" id="wsPortInput" class="input-ssh" placeholder="Port Manual..." style="display:none; margin-top:4px;">
+                                        <input type="number" id="wsPortInput" class="input-ssh" placeholder="Port..." style="display:none; margin-top:4px;">
                                     </div>
                                     <div>
-                                        <label class="lbl-vpn" style="color:#a855f7;">KEEPALIVE (MS)</label>
+                                        <label class="lbl-vpn" style="color:#a855f7;">KEEPALIVE</label>
                                         <select id="wsKeepDropdown" class="input-ssh" style="color:#a855f7;" onchange="toggleCustomWsKeepInput()">
-                                            <option value="5000">5000 (5s - Fast)</option>
-                                            <option value="15000">15000 (15s - Normal)</option>
-                                            <option value="30000">30000 (30s - Slow)</option>
+                                            <option value="5000">5000 (5s)</option>
+                                            <option value="15000">15000 (15s)</option>
+                                            <option value="30000">30000 (30s)</option>
                                             <option value="custom">✏️ Custom...</option>
                                         </select>
-                                        <input type="number" id="wsKeepInput" class="input-ssh" placeholder="Interval MS..." style="display:none; margin-top:4px;">
+                                        <input type="number" id="wsKeepInput" class="input-ssh" placeholder="MS..." style="display:none; margin-top:4px;">
                                     </div>
                                     <div>
                                         <label class="lbl-vpn" style="color:#a855f7;">MAX BUFFER</label>
@@ -974,36 +986,36 @@ const server = http.createServer(async (req, res) => {
                                             <option value="65536">65536 (64KB)</option>
                                             <option value="custom">✏️ Custom...</option>
                                         </select>
-                                        <input type="number" id="wsBufInput" class="input-ssh" placeholder="Bytes Limit..." style="display:none; margin-top:4px;">
+                                        <input type="number" id="wsBufInput" class="input-ssh" placeholder="Bytes..." style="display:none; margin-top:4px;">
                                     </div>
                                 </div>
 
-                                <div style="margin-top:12px; border-top:1px solid #1f1938; padding-top:10px;">
+                                <div style="margin-top:10px; border-top:1px solid #1f1938; padding-top:8px;">
                                     <div>
-                                        <label class="lbl-vpn" style="color:#eab308;">CUSTOM BANNER DROPBEAR (HTML / TEXT ALLOWED)</label>
-                                        <textarea id="bannerInput" class="input-ssh" style="height:60px; font-family:monospace; font-size:11px;" placeholder="Kosongkan untuk memakai banner standar..."></textarea>
+                                        <label class="lbl-vpn" style="color:#eab308;">BANNER DROPBEAR</label>
+                                        <textarea id="bannerInput" class="input-ssh" style="height:50px; font-family:monospace; font-size:10px;" placeholder="Kosongkan untuk banner standar..."></textarea>
                                     </div>
 
-                                    <div class="grid-2" style="margin-top:8px; margin-bottom:0;">
+                                    <div class="grid-2" style="margin-top:6px; margin-bottom:0;">
                                         <div>
-                                            <label class="lbl-vpn" style="color:#10b981;">TCP BBR SWITCH</label>
+                                            <label class="lbl-vpn" style="color:#10b981;">TCP BBR</label>
                                             <select id="bbrSelect" class="input-ssh" style="color:#10b981; font-weight:bold;">
-                                                <option value="true">⚡ ON (TCP BBR Active)</option>
-                                                <option value="false">❌ OFF (TCP Cubic Standard)</option>
+                                                <option value="true">⚡ ON</option>
+                                                <option value="false">❌ OFF</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label class="lbl-vpn" style="color:#f43f5e;">BADVPN UDPGW PORT</label>
+                                            <label class="lbl-vpn" style="color:#f43f5e;">UDPGW PORT</label>
                                             <select id="udpgwPortSelect" class="input-ssh" style="color:#f43f5e; font-weight:bold;">
-                                                <option value="7300">Port 7300 (Standard Game)</option>
-                                                <option value="7200">Port 7200 (Alt Game 1)</option>
-                                                <option value="7100">Port 7100 (Alt Game 2)</option>
+                                                <option value="7300">Port 7300</option>
+                                                <option value="7200">Port 7200</option>
+                                                <option value="7100">Port 7100</option>
                                             </select>
                                         </div>
                                     </div>
                                 </div>
 
-                                <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff; margin-top:10px;" onclick="saveWsProxySettingUI()">💾 SIMPAN CONFIG SSH SERVER</button>
+                                <button class="btn-token-trigger" style="background: #8b5cf6; color: #fff; margin-top:8px; padding:8px;" onclick="saveWsProxySettingUI()">💾 SIMPAN SSH CONFIG</button>
                             </div>
                         </div>
                     </div>
@@ -1015,13 +1027,13 @@ const server = http.createServer(async (req, res) => {
                         <div class="zt-admin-card">
                             <div class="sub-box" style="border-color: #0284c7; margin-bottom:0;">
                                 <div class="sub-box-title" style="color:#38bdf8;">⚙️ PENGATURAN V2RAY SERVER</div>
-                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; flex-direction: column; gap: 6px;">
                                     <div class="grid-2" style="margin-bottom:0;">
                                         <div>
                                             <label class="lbl-vpn" style="color:#eab308;">DNS MODE</label>
                                             <select id="dnsTypeSelect" class="input-ssh" style="color: #eab308; font-weight: bold;" onchange="toggleDnsPlaceholder()">
-                                                <option value="udp">🚀 UDP Fast DNS (IP)</option>
-                                                <option value="doh">🔒 DoH Secure DNS (HTTPS URL)</option>
+                                                <option value="udp">🚀 UDP Fast DNS</option>
+                                                <option value="doh">🔒 DoH Secure DNS</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1030,7 +1042,7 @@ const server = http.createServer(async (req, res) => {
                                                 <option value="ws">🌐 WebSocket (WS)</option>
                                                 <option value="grpc">⚡ gRPC Engine</option>
                                                 <option value="h2">🚀 HTTP/2 (H2)</option>
-                                                <option value="tcp">🔌 TCP (Raw Direct)</option>
+                                                <option value="tcp">🔌 TCP Direct</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1041,15 +1053,14 @@ const server = http.createServer(async (req, res) => {
                                             <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
                                             <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
                                             <option value="9.9.9.9">Quad9 DNS (9.9.9.9)</option>
-                                            <option value="https://1.1.1.1/dns-query">Cloudflare DoH (https://1.1.1.1/dns-query)</option>
-                                            <option value="https://dns.google/dns-query">Google DoH (https://dns.google/dns-query)</option>
-                                            <option value="https://dns.adguard-dns.com/dns-query">AdGuard DoH (https://dns.adguard-dns.com/dns-query)</option>
+                                            <option value="https://1.1.1.1/dns-query">Cloudflare DoH</option>
+                                            <option value="https://dns.google/dns-query">Google DoH</option>
                                             <option value="custom">✏️ Custom...</option>
                                         </select>
-                                        <input type="text" id="customDnsInput" class="input-ssh" placeholder="Ketik IP DNS atau URL DoH Manual..." style="color:#4ade80; display:none; margin-top:4px;">
+                                        <input type="text" id="customDnsInput" class="input-ssh" placeholder="Ketik DNS Manual..." style="color:#4ade80; display:none; margin-top:4px;">
                                     </div>
 
-                                    <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN V2RAY SERVER CONFIG</button>
+                                    <button class="btn-token-trigger" style="background: #0284c7; color: #fff; margin-top: 4px; padding:8px;" onclick="saveDnsNetworkSetting()">💾 SIMPAN V2RAY CONFIG</button>
                                 </div>
                             </div>
                         </div>
@@ -1061,9 +1072,9 @@ const server = http.createServer(async (req, res) => {
                     <div id="page-set-cfip" class="page-section">
                         <div class="zt-admin-card">
                             <div class="sub-box" style="border-color: #16a34a; margin-bottom:0;">
-                                <div class="sub-box-title" style="color:#4ade80;">🚀 PENGATURAN CLOUDFLARE CLEAN IP (CFIP)</div>
-                                <p style="font-size: 11px; color: #94a3b8; margin-bottom: 12px; line-height: 1.4;">Atur IP domain Cloudflare yang bersih/ringan untuk meningkatkan kestabilan koneksi akun V2Ray/SSH kamu.</p>
-                                <button class="btn-token-trigger" style="background: #16a34a; color: #fff;" onclick="promptCfipInput()">🚀 UBAH / RESET CLOUDFLARE CLEAN IP</button>
+                                <div class="sub-box-title" style="color:#4ade80;">🚀 CLOUDFLARE CLEAN IP (CFIP)</div>
+                                <p style="font-size: 10px; color: #94a3b8; margin-bottom: 10px; line-height: 1.4;">Atur IP Cloudflare yang bersih untuk kestabilan koneksi.</p>
+                                <button class="btn-token-trigger" style="background: #16a34a; color: #fff; padding:10px;" onclick="promptCfipInput()">🚀 UBAH / RESET CFIP</button>
                             </div>
                         </div>
                     </div>
@@ -1073,8 +1084,8 @@ const server = http.createServer(async (req, res) => {
                     <!-- ========================================== -->
                     <div id="page-generator" class="page-section">
                         <div class="card-blue" style="margin-top:0;">
-                          <div style="text-align: center; margin-bottom: 12px; border-bottom: 1px solid #1e2d54; padding-bottom: 8px;">
-                            <span style="font-size: 13px; font-weight: bold; color: #fff; tracking-wider;">⚡ DDFATHUVLES CONFIG GENERATOR</span>
+                          <div style="text-align: center; margin-bottom: 10px; border-bottom: 1px solid #1e2d54; padding-bottom: 6px;">
+                            <span style="font-size: 12px; font-weight: bold; color: #fff;">⚡ CONFIG GENERATOR</span>
                           </div>
                           <div class="grid-2">
                             <div>
@@ -1082,44 +1093,44 @@ const server = http.createServer(async (req, res) => {
                               <input id="uuidInput" type="text" value="Loading..." class="input-ssh" style="font-family: monospace;" readonly>
                             </div>
                             <div>
-                              <label class="lbl-vpn">PILIH DOMAIN TARGET TUNNEL</label>
+                              <label class="lbl-vpn">TARGET DOMAIN</label>
                               <select id="domainSelect" class="input-ssh" style="font-family: monospace; color: #38bdf8; font-weight: bold;">
                                 <option value="">-- Menunggu Domain --</option>
                               </select>
                             </div>
                           </div>
-                          <div style="margin-bottom: 12px;">
+                          <div style="margin-bottom: 10px;">
                             <label class="lbl-vpn">BUG HOST (SNI / CDN)</label>
                             <input id="bugInput" type="text" value="suporte.garena.com" class="input-ssh" style="font-family: monospace;">
                           </div>
 
-                          <div class="border-lbl" style="border-color:#38bdf8; color:#93c5fd;">BUG SNI (NORMAL / STANDAR)</div>
+                          <div class="border-lbl" style="border-color:#38bdf8; color:#93c5fd;">BUG SNI (NORMAL)</div>
                           <div class="grid-3">
-                            <button onclick="buildConfig('vless', 'sni', event)" class="btn-blue">VLESS STD</button>
-                            <button onclick="buildConfig('vmess', 'sni', event)" class="btn-blue">VMESS STD</button>
-                            <button onclick="buildConfig('trojan', 'sni', event)" class="btn-blue">TROJAN STD</button>
+                            <button onclick="buildConfig('vless', 'sni', event)" class="btn-blue">VLESS</button>
+                            <button onclick="buildConfig('vmess', 'sni', event)" class="btn-blue">VMESS</button>
+                            <button onclick="buildConfig('trojan', 'sni', event)" class="btn-blue">TROJAN</button>
                           </div>
 
-                          <div class="border-lbl" style="border-color:#eab308; color:#fde047;">BUG SNI (REVERSE / GAMBAR 2)</div>
+                          <div class="border-lbl" style="border-color:#eab308; color:#fde047;">BUG SNI (REVERSE)</div>
                           <div class="grid-3">
                             <button onclick="buildConfig('vless', 'sni_reverse', event)" class="btn-blue" style="color:#fde047;">VLESS REV</button>
                             <button onclick="buildConfig('vmess', 'sni_reverse', event)" class="btn-blue" style="color:#fde047;">VMESS REV</button>
                             <button onclick="buildConfig('trojan', 'sni_reverse', event)" class="btn-blue" style="color:#fde047;">TROJAN REV</button>
                           </div>
 
-                          <div class="border-lbl" style="border-color:#6366f1; color:#c7d2fe;">BUG CDN (PROXY PROT)</div>
+                          <div class="border-lbl" style="border-color:#6366f1; color:#c7d2fe;">BUG CDN (PROXY)</div>
                           <div class="grid-3">
                             <button onclick="buildConfig('vless', 'cdn', event)" class="btn-blue">VLESS</button>
                             <button onclick="buildConfig('vmess', 'cdn', event)" class="btn-blue">VMESS</button>
                             <button onclick="buildConfig('trojan', 'cdn', event)" class="btn-blue">TROJAN</button>
                           </div>
 
-                          <div id="output-area" class="result-box" style="margin-top: 15px; border-color: #38bdf8; display: none;">
-                            <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 6px; font-size: 11px;">
+                          <div id="output-area" class="result-box" style="margin-top: 10px; border-color: #38bdf8; display: none;">
+                            <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 4px; font-size: 10px;">
                               <span id="out-type" style="color: #38bdf8;">CONFIG</span>
                               <span onclick="copyOutConfig()" style="color: #4ade80; cursor: pointer; text-decoration: underline;">[COPY]</span>
                             </div>
-                            <p id="configText" style="word-break: break-all; color: #fff; max-h: 100px; overflow-y: auto; font-family: monospace;"></p>
+                            <p id="configText" style="word-break: break-all; color: #fff; max-h: 80px; overflow-y: auto; font-family: monospace;"></p>
                           </div>
                         </div>
                     </div>
@@ -1133,7 +1144,6 @@ const server = http.createServer(async (req, res) => {
                 let savedUsersData = []; 
                 let isPassConfigured = false;
 
-                // FUNGSI NAVIGASI SIDEBAR MENU
                 function toggleSidebar() {
                     document.getElementById('sidebar').classList.toggle('active');
                     document.getElementById('sidebar-overlay').classList.toggle('active');
@@ -1148,7 +1158,9 @@ const server = http.createServer(async (req, res) => {
                     document.querySelectorAll('.menu-item').forEach(item => {
                         item.classList.remove('active');
                     });
-                    event.currentTarget.classList.add('active');
+                    if (event && event.currentTarget) {
+                        event.currentTarget.classList.add('active');
+                    }
 
                     toggleSidebar();
                 }
@@ -1175,9 +1187,7 @@ const server = http.createServer(async (req, res) => {
                     }
                 }
 
-                function toggleDnsPlaceholder() {
-                    toggleCustomDnsInput();
-                }
+                function toggleDnsPlaceholder() { toggleCustomDnsInput(); }
 
                 function toggleCustomDnsInput() {
                     let sel = document.getElementById('dnsDropdown').value;
@@ -1263,12 +1273,8 @@ const server = http.createServer(async (req, res) => {
                         let res = await fetch('/api/set-network?pass=' + encodeURIComponent(adminToken) + '&dns_type=' + dnsType + '&custom_dns=' + encodeURIComponent(customDns) + '&engine=' + engine);
                         let data = await res.json();
                         alert(data.message);
-                        if (data.status === "success") {
-                            updateStats();
-                        }
-                    } catch(e) {
-                        alert("Gagal menyimpan konfigurasi ke backend!");
-                    }
+                        if (data.status === "success") updateStats();
+                    } catch(e) { alert("Gagal menyimpan konfigurasi ke backend!"); }
                 }
 
                 async function saveWsProxySettingUI() {
@@ -1314,7 +1320,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO (SINGLE TOKEN UNTUK SEMUA INGRESS RULES):\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
+                    let inputToken = prompt("MASUKKAN TOKEN CLOUDFLARE ARGO:\\n\\n(Kosongkan lalu klik OK jika ingin menghapus token tersimpan)");
                     if (inputToken === null) return;
 
                     try {
@@ -1332,7 +1338,7 @@ const server = http.createServer(async (req, res) => {
                         if (!loggedIn && !adminToken) return;
                     }
 
-                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan lalu klik OK untuk reset ke default)");
+                    let inputIp = prompt("MASUKKAN IP CLEAN CLOUDFLARE (CFIP):\\nContoh: 104.17.3.81\\n\\n(Kosongkan untuk reset ke default)");
                     if (inputIp === null) return;
 
                     try {
@@ -1366,7 +1372,7 @@ const server = http.createServer(async (req, res) => {
                         document.getElementById('disk').innerText = data.disk_usage || "0%"; 
                         document.getElementById('uptime').innerText = data.uptime || "0 Hours";
                         let detailActiveList = data.user_list_details || "Semua user offline";
-                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || "0") + " Active<br><span style='font-size:11px; font-weight:normal; color:#d8b4fe; display:block; margin-top:5px; white-space:pre-line;'>" + detailActiveList + "</span>";
+                        document.getElementById('ssh').innerHTML = "👥 " + (data.ssh_online || "0") + " Active<br><span style='font-size:9px; font-weight:normal; color:#d8b4fe; display:block; margin-top:2px; white-space:pre-line;'>" + detailActiveList + "</span>";
                         document.getElementById('display-cfip').innerText = data.active_cfip || "Default";
 
                         if(data.dns_type) {
@@ -1406,7 +1412,6 @@ const server = http.createServer(async (req, res) => {
 
                             document.getElementById('display-ws-port').innerText = data.ws_proxy_cfg.sshPort;
                             document.getElementById('display-ws-keep').innerText = (data.ws_proxy_cfg.keepAlive || 15000) + "ms";
-                            document.getElementById('display-ws-buf').innerText = (data.ws_proxy_cfg.maxBuffer || 32768) + " Bytes";
                         }
 
                         if(data.sys_settings) {
@@ -1420,26 +1425,26 @@ const server = http.createServer(async (req, res) => {
 
                         let ztContainer = document.getElementById('zt-container');
                         if (data.zt_domains && data.zt_domains.length > 1) {
-                            let dropdownHtml = '<select id="named-url" class="select-zt" onmousedown="event.stopPropagation()">';
-                            data.zt_domains.forEach(item => { dropdownHtml += '<option value="' + item.domain + '">🌐 ' + item.domain + ' (Port ' + item.port + ')</option>'; });
+                            let dropdownHtml = '<select id="named-url" class="select-zt-mini" onmousedown="event.stopPropagation()">';
+                            data.zt_domains.forEach(item => { dropdownHtml += '<option value="' + item.domain + '">🌐 ' + item.domain + ' (' + item.port + ')</option>'; });
                             dropdownHtml += '</select>';
                             ztContainer.innerHTML = dropdownHtml;
                         } else if (data.zt_domains && data.zt_domains.length === 1) {
-                            ztContainer.innerHTML = '<div class="url-box" id="named-url">' + data.zt_domains[0].domain + '</div>';
+                            ztContainer.innerHTML = '<div class="url-box" id="named-url" style="color:#d8b4fe;">' + data.zt_domains[0].domain + '</div>';
                         } else {
-                            ztContainer.innerHTML = '<div class="url-box" id="named-url">Menghubungkan Domain SSH...</div>';
+                            ztContainer.innerHTML = '<div class="url-box" id="named-url" style="color:#d8b4fe;">Menghubungkan...</div>';
                         }
 
                         let ztVmessContainer = document.getElementById('zt-vmess-container');
                         if (data.zt_vmess_domains && data.zt_vmess_domains.length > 1) {
-                            let dropdownVmessHtml = '<select id="vmess-named-url" class="select-zt" style="border-color:#0284c7; color:#38bdf8;" onmousedown="event.stopPropagation()">';
-                            data.zt_vmess_domains.forEach(item => { dropdownVmessHtml += '<option value="' + item.domain + '">⚡ ' + item.domain + ' (Port ' + item.port + ')</option>'; });
+                            let dropdownVmessHtml = '<select id="vmess-named-url" class="select-zt-mini" style="color:#38bdf8;" onmousedown="event.stopPropagation()">';
+                            data.zt_vmess_domains.forEach(item => { dropdownVmessHtml += '<option value="' + item.domain + '">⚡ ' + item.domain + ' (' + item.port + ')</option>'; });
                             dropdownVmessHtml += '</select>';
                             ztVmessContainer.innerHTML = dropdownVmessHtml;
                         } else if (data.zt_vmess_domains && data.zt_vmess_domains.length === 1) {
                             ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">' + data.zt_vmess_domains[0].domain + '</div>';
                         } else {
-                            ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan Domain VMess...</div>';
+                            ztVmessContainer.innerHTML = '<div class="url-box" id="vmess-named-url" style="color:#38bdf8;">Menghubungkan...</div>';
                         }
 
                         document.getElementById('railway-url').innerText = data.railway_url || "Tidak Aktif"; 
@@ -1450,17 +1455,17 @@ const server = http.createServer(async (req, res) => {
                         let optionsHtml = '';
 
                         if (data.quick_url && !data.quick_url.includes("Menunggu")) {
-                            optionsHtml += '<option value="' + data.quick_url + '">⚡ Quick Tunnel: ' + data.quick_url + '</option>';
+                            optionsHtml += '<option value="' + data.quick_url + '">⚡ Quick: ' + data.quick_url + '</option>';
                         }
 
                         if (data.zt_vmess_domains && data.zt_vmess_domains.length > 0) {
                             data.zt_vmess_domains.forEach(d => {
-                                optionsHtml += '<option value="' + d.domain + '">🛡️ Zero Argo VMess (Port 8001): ' + d.domain + '</option>';
+                                optionsHtml += '<option value="' + d.domain + '">🛡️ Zero Argo: ' + d.domain + '</option>';
                             });
                         }
 
                         if (!optionsHtml) {
-                            optionsHtml = '<option value="">-- Menunggu Domain VMess --</option>';
+                            optionsHtml = '<option value="">-- Menunggu Domain --</option>';
                         }
 
                         domainSelect.innerHTML = optionsHtml;
@@ -1481,18 +1486,18 @@ const server = http.createServer(async (req, res) => {
                         } else { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Belum ada akun SSH kustom</td></tr>'; }
                     } catch(e) {}
                 }
-                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA RAHASIA PEMBUAT AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip + "\\n📱 User-Agent : " + userObj.user_agent); } }
+                function showAccountDetails(username) { let userObj = savedUsersData.find(u => u.username === username); if(userObj) { alert("🕵️ DATA AKUN:\\n===============================\\n👤 Username   : " + userObj.username + "\\n🔑 Password   : " + userObj.password + "\\n🌐 IP Address : " + userObj.ip); } }
                 async function createAccount() {
                     let user = document.getElementById('ssh-user').value.trim(); let pass = document.getElementById('ssh-pass').value.trim(); let msg = document.getElementById('ssh-msg'); let resBox = document.getElementById('ssh-result'); let copyBtn = document.getElementById('btn-copy-acc');
-                    if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password dulu!"; return; }
+                    if(!user || !pass) { msg.style.color = "#ef4444"; msg.innerText = "Isi username & password!"; return; }
                     try {
                         let res = await fetch('/api/add?user='+user+'&pass='+pass); let data = await res.json();
                         if(data.status === "success") { msg.innerText = ""; resBox.innerText = data.message; resBox.style.display = "block"; copyBtn.style.display = "block"; document.getElementById('ssh-user').value = ""; document.getElementById('ssh-pass').value = ""; fetchAccounts(); } else { msg.style.color = "#ef4444"; msg.innerText = data.message; resBox.style.display = "none"; copyBtn.style.display = "none"; }
                     } catch(e) { msg.innerText = "Gagal memproses API"; }
                 }
-                function copyAccountText() { let txt = document.getElementById('ssh-result').innerText; navigator.clipboard.writeText(txt); let btn = document.getElementById('btn-copy-acc'); btn.innerText = "✅ STRUK AKUN BERHASIL DICOPY!"; btn.style.background = "#1f2937"; btn.style.color = "#4ade80"; setTimeout(() => { btn.innerText = "📋 COPY DETAIL AKUN"; btn.style.background = "#4ade80"; btn.style.color = "#090d16"; }, 1500); }
+                function copyAccountText() { let txt = document.getElementById('ssh-result').innerText; navigator.clipboard.writeText(txt); let btn = document.getElementById('btn-copy-acc'); btn.innerText = "✅ COPIED!"; setTimeout(() => { btn.innerText = "📋 COPY DETAIL AKUN"; }, 1500); }
                 async function deleteAccount(username) {
-                    if(!adminToken) { alert("Aksi Ilegal! Lu harus Login Admin dulu Bos!"); return; }
+                    if(!adminToken) { alert("Aksi Ilegal! Login Admin dulu Bos!"); return; }
                     if(confirm("Hapus akun SSH "+username+"?")) {
                         try {
                             let res = await fetch('/api/delete?user='+username+'&token='+adminToken); let data = await res.json();
@@ -1507,8 +1512,9 @@ const server = http.createServer(async (req, res) => {
                     let urlText = elem.tagName === "SELECT" ? elem.value : elem.innerText;
                     
                     if(!urlText.includes("Menunggu") && !urlText.includes("Tidak Aktif")) {
-                        navigator.clipboard.writeText(urlText); let btn = document.getElementById(btnId); let oldText = btn.innerText; btn.innerText = "✅ COPIED!"; btn.style.background = "#4ade80"; btn.style.color = "#090d16";
-                        setTimeout(() => { btn.innerText = oldText; if (elementId === 'named-url') { btn.style.background = '#a855f7'; btn.style.color = '#fff'; } else if (elementId === 'vmess-named-url') { btn.style.background = '#0284c7'; btn.style.color = '#fff'; } else if (elementId === 'railway-url') { btn.style.background = '#f43f5e'; btn.style.color = '#fff'; } else { btn.style.background = '#38bdf8'; btn.style.color = '#090d16'; } }, 1500);
+                        navigator.clipboard.writeText(urlText); let btn = document.getElementById(btnId);
+                        btn.innerText = "✅ Done"; btn.style.background = "#4ade80"; btn.style.color = "#000";
+                        setTimeout(() => { btn.innerText = "📋 Copy"; btn.style.background = "#1e293b"; btn.style.color = "#38bdf8"; }, 1500);
                     }
                 }
 
